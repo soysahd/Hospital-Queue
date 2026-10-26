@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hospital Queue Management System | Smart Healthcare & Appointments</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800;900&display=swap" rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- JsBarcode CDN for standard Code 128 Token Barcodes -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+</head>
+<body>
+
+  <!-- 1. Top Utility Header (Emergency, Hotline, Location) -->
+  <div class="top-utility-bar">
+    <div class="utility-contacts">
+      <span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+        General Inquiries: +94 (11) 452 4400
+      </span>
+      <span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+        OPD & Queue Service: 24/7 Available
+      </span>
+      <span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        Angoda, Colombo, Sri Lanka
+      </span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <span class="utility-badge-emergency">Emergency Care: 1990</span>
+    </div>
+  </div>
+
+  <!-- 2. Main Navigation Header (Clean White, Exact Title Required) -->
+  <header class="app-header">
+    <div class="header-inner">
+      
+      <!-- Brand Section with Original Medical Cross / Queue Icon -->
+      <a href="javascript:void(0)" class="brand-section" onclick="navigateToSection('home')">
+        <div class="brand-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9" stroke-width="2"/></svg>
+        </div>
+        <div class="brand-titles">
+          <span class="main-brand-title">HOSPITAL QUEUE MANAGEMENT SYSTEM</span>
+          <span class="brand-subtitle">Smart Outpatient & Specialist Care Portal</span>
+        </div>
+      </a>
+
+      <!-- Navigation Links -->
+      <ul class="main-nav-menu">
+        <li><button id="nav-home" class="nav-link-btn active" onclick="navigateToSection('home')">Home</button></li>
+        <li><button id="nav-services" class="nav-link-btn" onclick="navigateToSection('services')">Our Services</button></li>
+        <li><button id="nav-book" class="nav-link-btn" onclick="navigateToSection('book')">Book Appointment</button></li>
+        <li><button id="nav-queue-status" class="nav-link-btn" onclick="navigateToSection('queue')">Live TV Queue</button></li>
+        <li><button id="nav-patient" class="nav-link-btn" onclick="navigateToSection('patient')">Patient Portal</button></li>
+        <li><button id="nav-doctor" class="nav-link-btn" onclick="navigateToSection('doctor')">Doctor Console</button></li>
+        <li><button id="nav-lab" class="nav-link-btn" onclick="navigateToSection('lab')">Laboratory</button></li>
+        <li><button id="nav-admin" class="nav-link-btn" onclick="navigateToSection('admin')">Admin Hub</button></li>
+        <li><button id="nav-reception" class="nav-link-btn" onclick="navigateToSection('reception')">Reception Desk</button></li>
+      </ul>
+
+      <!-- Action / User Session Area -->
+      <div class="header-actions">
+        <div id="userProfileHeaderBadge" class="user-logged-badge" style="display: none;">
+          <span id="headerUserName">Staff User</span>
+          <span id="headerUserRole" style="color: var(--accent-teal); font-size: 0.75rem; text-transform: uppercase;">ADMIN</span>
+          <button class="btn-outline" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; border-radius: 4px; margin-left: 0.3rem;" onclick="logout()">Logout</button>
+        </div>
+        <div id="headerLoginBtnContainer">
+          <button class="btn-header-login" onclick="openLoginModal()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            Sign In / Switch Portal
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Global Voice/Chime Announcement Alert Banner -->
+  <div id="liveCallBanner" class="call-banner-alert" style="max-width: 1400px; margin: 1.5rem auto 0; padding: 1.25rem 2rem;">
+    🔔 ATTENTION: TOKEN <span id="bannerToken">OPD-001</span> PLEASE PROCEED TO <span id="bannerRoom">ROOM 01</span>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VIEW 1: ASIRI HEALTH INSPIRED HOMEPAGE (Default Landing Page)    -->
+  <!-- ================================================================ -->
+  <main id="view-homepage" class="tab-pane active">
+    
+    <!-- Hero Section: Modern Automatic Slider with Smooth Transitions -->
+    <div class="hero-slider-wrapper" id="heroSlider" aria-label="Hospital Overview and Key Highlights">
+      <!-- Slide 1: Ultra-modern Hospital Exterior -->
+      <div class="hero-slide active" data-slide="0">
+        <div class="hero-slide-bg" style="background-image: url('/images/hospital-exterior.jpg');" role="img" aria-label="Modern Hospital Architectural Campus and Main Pavilion"></div>
+        <div class="hero-overlay"></div>
+        <div class="hero-container">
+          <div class="hero-content">
+            <span class="hero-tagline">Advanced Patient Flow Technology</span>
+            <h1 class="hero-title">Smarter Hospital Visits, Less Waiting</h1>
+            <p class="hero-description">
+              Experience world-class outpatient care with real-time digital queuing. Book advance consultations, check in seamlessly with your hospital card barcode, receive electronic queue tokens, and follow doctor room calls live on your phone.
+            </p>
+            <div class="hero-buttons">
+              <button class="btn-hero-primary" onclick="openAppointmentModal()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                Book an Appointment
+              </button>
+              <button class="btn-hero-secondary" onclick="navigateToSection('queue')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                Check Queue Status
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 2: Modern Reception and Patient Concierge Desk -->
+      <div class="hero-slide" data-slide="1">
+        <div class="hero-slide-bg" style="background-image: url('/images/hospital-reception.jpg');" role="img" aria-label="Patient Reception Concierge Desk and Waiting Lounge"></div>
+        <div class="hero-overlay"></div>
+        <div class="hero-container">
+          <div class="hero-content">
+            <span class="hero-tagline">Seamless Patient Concierge & Fast Triage</span>
+            <h1 class="hero-title">Warm Hospitality Meets Intelligent Care</h1>
+            <p class="hero-description">
+              Rapid barcode card verification, instant thermal token issuance, and streamlined waiting lounge triage. Say goodbye to disorganized physical queues and experience compassionate healthcare.
+            </p>
+            <div class="hero-buttons">
+              <button class="btn-hero-primary" onclick="navigateToSection('reception')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 8h10M7 12h10M7 16h10"></path></svg>
+                Reception Check-In Desk
+              </button>
+              <button class="btn-hero-secondary" onclick="openLoginModal('patient')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                Patient Portal Login
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 3: Advanced Surgical Suites & Robotic Medical Technology -->
+      <div class="hero-slide" data-slide="2">
+        <div class="hero-slide-bg" style="background-image: url('/images/modern-ot-theatre.jpg');" role="img" aria-label="Advanced Robotic Surgical Operating Theater and Diagnostics"></div>
+        <div class="hero-overlay"></div>
+        <div class="hero-container">
+          <div class="hero-content">
+            <span class="hero-tagline">State-of-the-Art Clinical Infrastructure</span>
+            <h1 class="hero-title">Precision Diagnostics & Modern Theatres</h1>
+            <p class="hero-description">
+              Equipped with high-definition digital surgical monitoring, automated lab specimen trackers, and real-time electronic medical records for precision treatment.
+            </p>
+            <div class="hero-buttons">
+              <button class="btn-hero-primary" onclick="navigateToSection('doctor')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+                Doctor Workstation
+              </button>
+              <button class="btn-hero-secondary" onclick="navigateToSection('services')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                Explore Specialized Clinics
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slider Controls -->
+      <div class="hero-slider-nav">
+        <button class="hero-nav-arrow" id="heroPrevBtn" aria-label="Previous Slide" onclick="prevHeroSlide()">&#10094;</button>
+        <div class="hero-dots" id="heroDots">
+          <button class="hero-dot active" data-slide="0" aria-label="Slide 1" onclick="goToHeroSlide(0)"></button>
+          <button class="hero-dot" data-slide="1" aria-label="Slide 2" onclick="goToHeroSlide(1)"></button>
+          <button class="hero-dot" data-slide="2" aria-label="Slide 3" onclick="goToHeroSlide(2)"></button>
+        </div>
+        <button class="hero-nav-arrow" id="heroNextBtn" aria-label="Next Slide" onclick="nextHeroSlide()">&#10095;</button>
+      </div>
+    </div>
+
+    <!-- Healthcare Services Cards Section -->
+    <section id="section-services" class="section-wrapper">
+      <div class="section-header-center">
+        <span class="section-subhead">Comprehensive Healthcare Solutions</span>
+        <h2 class="section-main-title">Modern Hospital Queue & Clinical Services</h2>
+        <p class="section-desc">Designed to provide smooth, stress-free outpatient visits from hospital card scanning to post-consultation care.</p>
+      </div>
+
+      <div class="service-cards-grid">
+        <!-- 1. Doctor Appointments -->
+        <div class="service-card">
+          <div class="service-card-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+          </div>
+          <h3 class="service-card-title">Doctor Appointments</h3>
+          <p class="service-card-desc">Schedule advance consultations with experienced general medicine and specialist infectious disease doctors online or via telephone.</p>
+          <button class="service-card-btn" onclick="openAppointmentModal()">Book Online Appointment &rarr;</button>
+        </div>
+
+        <!-- 2. Patient Registration -->
+        <div class="service-card">
+          <div class="service-card-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+          </div>
+          <h3 class="service-card-title">Patient Registration</h3>
+          <p class="service-card-desc">Register new hospital cards or verify your existing barcode for immediate admission into OPD and specialized clinic sessions.</p>
+          <button class="service-card-btn" onclick="navigateToSection('reception')">Patient Check-In Desk &rarr;</button>
+        </div>
+
+        <!-- 3. Queue Token Generation -->
+        <div class="service-card">
+          <div class="service-card-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="7" y1="8" x2="17" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="12" y2="16"></line></svg>
+          </div>
+          <h3 class="service-card-title">Queue Token Generation</h3>
+          <p class="service-card-desc">Fast thermal token printing with high-precision Code 128 barcodes. Built with duplicate prevention and safe reprint protection.</p>
+          <button class="service-card-btn" onclick="navigateToSection('reception')">Generate Queue Token &rarr;</button>
+        </div>
+
+        <!-- 4. Live Queue Status -->
+        <div class="service-card">
+          <div class="service-card-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          </div>
+          <h3 class="service-card-title">Live Queue Status</h3>
+          <p class="service-card-desc">Real-time digital signage displays current room assignments, estimated wait times, and upcoming tokens across OPD and specialist suites.</p>
+          <button class="service-card-btn" onclick="navigateToSection('display')">Open Live TV Signage &rarr;</button>
+        </div>
+
+        <!-- 5. Doctor Consultation Information -->
+        <div class="service-card">
+          <div class="service-card-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+          </div>
+          <h3 class="service-card-title">Doctor Consultation</h3>
+          <p class="service-card-desc">Access longitudinal clinical history, diagnostic notes, electronic prescriptions, and laboratory orders directly through authorized doctor stations.</p>
+          <button class="service-card-btn" onclick="navigateToSection('doctor')">Doctor Workstation &rarr;</button>
+        </div>
+
+        <!-- 6. Clinic Information -->
+        <div class="service-card">
+          <div class="service-card-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          </div>
+          <h3 class="service-card-title">Clinic Sessions</h3>
+          <p class="service-card-desc">Learn about specialized infection clinics, fever triage protocols, dengue clinical units, and daily outpatient operating schedules.</p>
+          <button class="service-card-btn" onclick="navigateToSection('about')">Explore Clinics &rarr;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Queue Status Section (Sample Demonstration Data with Live Database Synchronization) -->
+    <section id="section-queue" class="section-wrapper" style="background: #ffffff; border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);">
+      <div class="section-header-center">
+        <span class="section-subhead">Real-Time Patient Flow</span>
+        <h2 class="section-main-title">Live Outpatient Queue Status</h2>
+        <p class="section-desc">Track room allocations and active tokens. When connected to the MySQL database, this board synchronizes live via WebSockets.</p>
+      </div>
+
+      <div class="live-queue-preview-box">
+        <div class="live-queue-header">
+          <div class="live-queue-title-area">
+            <div class="live-indicator-dot"></div>
+            <span style="font-weight: 800; font-size: 1.15rem;">MAIN OPD & SPECIALIST CLINIC MONITOR</span>
+          </div>
+          <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <span class="sample-notice-pill">Live Demonstration Data</span>
+            <button class="btn-outline" style="background: #ffffff; color: var(--primary-navy); padding: 0.35rem 0.85rem; font-size: 0.75rem;" onclick="refreshLiveQueueBoard()">
+              Refresh Status
+            </button>
+          </div>
+        </div>
+
+        <table class="queue-table-styled">
+          <thead>
+            <tr>
+              <th>Queue Session</th>
+              <th>Doctor / Consultant</th>
+              <th>Room Assignment</th>
+              <th>Currently Serving</th>
+              <th>Last Issued Token</th>
+              <th>Approx. Wait Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="homeLiveQueueTbody">
+            <!-- Populated dynamically via JS from Database -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="section-wrapper">
+      <div class="section-header-center">
+        <span class="section-subhead">Simple 5-Step Journey</span>
+        <h2 class="section-main-title">How Our Smart Queue Works</h2>
+        <p class="section-desc">From arrival to doctor consultation, our digital system eliminates waiting lines and ensures privacy.</p>
+      </div>
+
+      <div class="how-it-works-grid">
+        <div class="step-card">
+          <div class="step-number-circle">1</div>
+          <h4 class="step-card-title">Register Card</h4>
+          <p class="step-card-desc">Scan your hospital card barcode or provide your ID at reception.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number-circle">2</div>
+          <h4 class="step-card-title">Book or Check In</h4>
+          <p class="step-card-desc">Confirm your advance booking or select walk-in general triage.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number-circle">3</div>
+          <h4 class="step-card-title">Receive Token</h4>
+          <p class="step-card-desc">Get your printed minimal thermal token with scannable barcode.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number-circle">4</div>
+          <h4 class="step-card-title">Follow Live Queue</h4>
+          <p class="step-card-desc">Watch digital screens or track room calls on your mobile phone.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number-circle">5</div>
+          <h4 class="step-card-title">Doctor Consultation</h4>
+          <p class="step-card-desc">Enter the assigned room when your token is called by the physician.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Why Use Our System Section -->
+    <section class="section-wrapper" style="background: var(--medical-blue-light); border-top: 1px solid #bfdbfe; border-bottom: 1px solid #bfdbfe;">
+      <div class="section-header-center">
+        <span class="section-subhead">Patient-First Care</span>
+        <h2 class="section-main-title">Why Use Our Hospital System?</h2>
+        <p class="section-desc">Experience cutting-edge digital healthcare management designed for Sri Lanka's leading medical facilities.</p>
+      </div>
+
+      <div class="why-choose-grid">
+        <div class="why-card">
+          <div class="why-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+          </div>
+          <div>
+            <h4 class="why-card-title">Zero Waiting Chaos</h4>
+            <p class="why-card-desc">Eliminates crowded waiting hallways by scheduling patients through concurrent multi-doctor queues.</p>
+          </div>
+        </div>
+        <div class="why-card">
+          <div class="why-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          </div>
+          <div>
+            <h4 class="why-card-title">Strict Privacy Safeguards</h4>
+            <p class="why-card-desc">Public screens and printed tickets never display patient names, national IDs, or medical diagnoses.</p>
+          </div>
+        </div>
+        <div class="why-card">
+          <div class="why-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          </div>
+          <div>
+            <h4 class="why-card-title">Atomic Allocation</h4>
+            <p class="why-card-desc">Database concurrency locks ensure no two doctors receive the same patient token simultaneously.</p>
+          </div>
+        </div>
+        <div class="why-card">
+          <div class="why-card-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </div>
+          <div>
+            <h4 class="why-card-title">Longitudinal E-Records</h4>
+            <p class="why-card-desc">Authorized doctors access longitudinal clinical visits, previous dengue fever encounters, and prescriptions.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hospital Facilities & Infrastructure Showcase (Asiri Health Inspired) -->
+    <section class="section-wrapper" style="background: #f8fafc; border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);">
+      <div class="section-header-center">
+        <span class="section-subhead">World-Class Healthcare Standards</span>
+        <h2 class="section-main-title">Hospital Facilities & Clinical Excellence</h2>
+        <p class="section-desc">Tour our ultra-modern hospital campus, advanced surgical units, and patient-first outpatient lounges.</p>
+      </div>
+
+      <div class="feature-showcase-grid">
+        <!-- Facility Card 1: Modern Reception & Triage -->
+        <div class="feature-img-card">
+          <div class="feature-img-box">
+            <img src="/images/hospital-reception.jpg" alt="Hospital Reception Concierge and Lounge" loading="lazy">
+            <span class="feature-badge">Outpatient Care</span>
+          </div>
+          <div class="feature-card-content">
+            <h3 class="feature-card-title">Patient Concierge & Triage Lounge</h3>
+            <p class="feature-card-desc">Comfortable, air-conditioned check-in lounges designed for dignity and comfort with fast automated barcode card scanners and queue monitors.</p>
+            <div class="feature-card-meta">
+              <span>✓ Priority Fever Triage</span>
+              <span>✓ Wheelchair Accessible</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Facility Card 2: Modern Robotic OT & Diagnostics -->
+        <div class="feature-img-card">
+          <div class="feature-img-box">
+            <img src="/images/modern-ot-theatre.jpg" alt="Advanced Surgical Theatres and Robotic Diagnostics" loading="lazy">
+            <span class="feature-badge">Advanced Diagnostics</span>
+          </div>
+          <div class="feature-card-content">
+            <h3 class="feature-card-title">Precision Operating & Surgical Suites</h3>
+            <p class="feature-card-desc">Equipped with robotic-assisted surgical instrumentation, laparoscopic stations, and sterile laminar airflow theatre suites.</p>
+            <div class="feature-card-meta">
+              <span>✓ Robotic Assisted Surgery</span>
+              <span>✓ 24/7 ICU Backup</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Facility Card 3: Modern Hospital Campus -->
+        <div class="feature-img-card">
+          <div class="feature-img-box">
+            <img src="/images/hospital-exterior.jpg" alt="Modern Hospital Exterior and Campus" loading="lazy">
+            <span class="feature-badge">State-Of-The-Art Campus</span>
+          </div>
+          <div class="feature-card-content">
+            <h3 class="feature-card-title">24/7 Medical Center & Emergency Pavilion</h3>
+            <p class="feature-card-desc">An architecturally designed, eco-friendly medical complex featuring green healing gardens, pharmacy pavilions, and round-the-clock emergency care.</p>
+            <div class="feature-card-meta">
+              <span>✓ 24/7 Emergency Wing</span>
+              <span>✓ High-Capacity Parking</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Doctor & Specialist Spotlight (Asiri Health Inspired) -->
+    <section class="section-wrapper">
+      <div class="doctor-spotlight-wrapper">
+        <div class="doctor-spotlight-img-box">
+          <img src="/images/doctor-specialist.jpg" alt="Lead Consultant Physician" loading="lazy">
+        </div>
+        <div class="doctor-spotlight-content">
+          <span class="doctor-role-badge">Lead Clinical Consultant</span>
+          <h2 class="doctor-name">Dr. Lalith Jayasuriya</h2>
+          <p class="doctor-quals">MBBS, MD (Medicine), MRCP (UK), FCCP — Senior Consultant Physician & Clinical Director</p>
+          <p class="doctor-bio">
+            With over 25 years of clinical practice in internal medicine and tropical infectious diseases, Dr. Jayasuriya leads our clinical governance and digital outpatient triage workflows. Our patient-centered system ensures each consultation is backed by longitudinal medical records, immediate lab orders, and zero unnecessary waiting.
+          </p>
+          <div class="doctor-stats-row">
+            <div class="doc-stat-item">
+              <span class="doc-stat-num">25+</span>
+              <span class="doc-stat-label">Years Clinical Experience</span>
+            </div>
+            <div class="doc-stat-item">
+              <span class="doc-stat-num">40,000+</span>
+              <span class="doc-stat-label">Consultations Performed</span>
+            </div>
+            <div class="doc-stat-item">
+              <span class="doc-stat-num">100%</span>
+              <span class="doc-stat-label">Digital E-Prescriptions</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap;">
+            <button class="btn-primary" onclick="openAppointmentModal()">Book Consultation</button>
+            <button class="btn-outline" onclick="navigateToSection('services')">View Department Doctors</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- About Section Anchor -->
+    <section id="section-about" class="section-wrapper">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center;">
+        <div>
+          <span class="section-subhead">Dedicated Healthcare Excellence</span>
+          <h2 class="section-main-title">Pioneering Intelligent Patient Queuing</h2>
+          <p style="color: var(--text-muted); margin-bottom: 1.25rem;">
+            The Hospital Queue Management System integrates front-desk barcode scanning, automated clinic scheduling, multi-doctor concurrent OPD room calling, and minimal thermal barcode ticket printing.
+          </p>
+          <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+            Whether attending general medicine consultations or specialist fever sessions, patients receive an organized, dignifying hospital experience with accurate wait estimations.
+          </p>
+          <div style="display: flex; gap: 1rem;">
+            <button class="btn-primary" onclick="openLoginModal('patient')">Patient Login Portal</button>
+            <button class="btn-outline" onclick="openLoginModal('doctor')">Doctor Workstation</button>
+          </div>
+        </div>
+        <div style="background: var(--accent-teal-light); border: 2px dashed var(--accent-teal); border-radius: var(--radius-lg); padding: 2.5rem; text-align: center;">
+          <div style="font-size: 3.5rem; font-weight: 900; color: var(--primary-navy); line-height: 1;">24/7</div>
+          <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-teal-dark); margin-bottom: 1.5rem;">Real-time Automated Triage</div>
+          <p style="font-size: 0.9rem; color: var(--text-muted);">
+            Serving Outpatient Departments, Specialized Tropical & Infectious Disease Clinics, and Walk-in emergency cases across Sri Lanka.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================================================================ -->
+  <!-- VIEW 2: RECEPTION COUNTER & BARCODE DESK                         -->
+  <!-- ================================================================ -->
+  <div id="view-reception" class="tab-pane app-view-container">
+    <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 2rem;">
+      
+      <!-- Left: Reception Check-In -->
+      <div>
+        <div class="app-card">
+          <div class="app-card-header">
+            <h2 class="app-card-title">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h10"/></svg>
+              Reception Barcode Check-In Counter
+            </h2>
+            <span class="sample-notice-pill" style="background: var(--medical-blue-light); color: var(--medical-blue); border-color: #bfdbfe;">Barcode Counter</span>
+          </div>
+
+          <!-- Quick Barcode Simulation Buttons -->
+          <div style="background: var(--bg-page); padding: 0.85rem; border-radius: 8px; margin-bottom: 1.25rem; border: 1px solid var(--border-light);">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 700;">
+              QUICK-SCAN SYNTHETIC HOSPITAL CARDS:
+            </div>
+            <div id="quickScanButtons" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+          </div>
+
+          <form onsubmit="event.preventDefault(); handleBarcodeScan();">
+            <div style="margin-bottom: 1.25rem;">
+              <label class="form-label">Scan Hospital Card Barcode or Enter Patient ID:</label>
+              <div style="display: flex; gap: 0.75rem;">
+                <input type="text" id="barcodeInput" class="form-control" placeholder="e.g. PAT-000123" required>
+                <button type="submit" class="btn-primary" style="white-space: nowrap;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Scan Card
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Verification Card -->
+          <div id="patientLookupCard" style="display: none; margin-top: 1.5rem; background: var(--bg-page); border-radius: var(--radius-md); padding: 1.25rem; border: 1.5px solid var(--border-light);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+              <div>
+                <h3 id="lookupPatientName" style="font-size: 1.25rem; color: var(--primary-navy); font-weight: 800;">-</h3>
+                <div style="color: var(--accent-teal); font-size: 0.85rem; font-weight: 700;" id="lookupHospitalNum">Hospital No: -</div>
+              </div>
+              <div id="bookingBadgeContainer"></div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; font-size: 0.85rem; margin-bottom: 1.25rem; background: #ffffff; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-light);">
+              <div><span style="color:var(--text-muted);">DOB:</span> <b id="lookupDob">-</b></div>
+              <div><span style="color:var(--text-muted);">Gender:</span> <b id="lookupGender">-</b></div>
+              <div><span style="color:var(--text-muted);">Phone:</span> <b id="lookupPhone">-</b></div>
+            </div>
+
+            <div id="alreadyIssuedAlert" style="display: none; background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem;">
+              ⚠️ <b>Patient already has an active token:</b> <span id="existingTokenNumber" style="font-weight: 900; font-size: 1.1rem; color: var(--primary-navy);"></span>.
+              You can reprint their ticket without consuming a second token.
+            </div>
+
+            <div id="tokenIssueControls">
+              <div style="margin-bottom: 1rem;">
+                <label class="form-label">Select Destination Clinic / Session:</label>
+                <select id="sessionSelect" class="form-control"></select>
+              </div>
+
+              <div style="margin-bottom: 1.25rem;">
+                <label class="form-label">Clinical Triage Priority:</label>
+                <select id="prioritySelect" class="form-control">
+                  <option value="1">Standard Walk-in / General Queue</option>
+                  <option value="2">Priority (Elderly, Infant, High Fever)</option>
+                  <option value="3">Urgent / Emergency Triage</option>
+                </select>
+              </div>
+
+              <div style="display: flex; gap: 0.75rem;">
+                <button id="btnIssueToken" type="button" class="btn-teal" style="flex: 1;" onclick="submitTokenIssue()">
+                  Check In & Generate Token
+                </button>
+                <button id="btnReprintToken" type="button" class="btn-outline" style="display: none;" onclick="triggerMinimalThermalPrint()">
+                  Reprint Receipt
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Token Barcode Resolver Test Box -->
+          <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border-light);">
+            <label class="form-label">Scan / Resolve Issued Token Barcode:</label>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="tokenBarcodeScanInput" class="form-control" placeholder="Scan token barcode (e.g. OPD-001)">
+              <button class="btn-outline" style="white-space: nowrap;" onclick="resolveTokenBarcode()">Resolve Token</button>
+            </div>
+            <div id="tokenBarcodeResolvedInfo" style="margin-top: 0.5rem; font-size: 0.85rem; font-weight: 600;"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right: SECTION 5 & 7 MANDATORY MINIMAL THERMAL PRINT RECEIPT -->
+      <div>
+        <div class="app-card" style="text-align: center;">
+          <div class="app-card-header">
+            <h2 class="app-card-title">
+              Queue Token Thermal Receipt (58/80 mm)
+            </h2>
+            <button class="btn-teal" style="font-size: 0.8rem; padding: 0.35rem 0.85rem;" onclick="triggerMinimalThermalPrint()">
+              Print Receipt
+            </button>
+          </div>
+
+          <!-- MINIMAL THERMAL RECEIPT: Strictly ONLY the Token Number and its Barcode -->
+          <div id="thermalPrintTarget" class="thermal-receipt-preview">
+            <!-- 1. The queue token number in large, bold, clearly readable text -->
+            <div id="minimalPrintToken" class="receipt-minimal-token">OPD-001</div>
+            <!-- 2. A barcode generated specifically for that queue token -->
+            <div class="receipt-barcode-container">
+              <svg id="barcodeCanvas"></svg>
+            </div>
+          </div>
+
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem; line-height: 1.5; text-align: left; background: var(--bg-page); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--border-light);">
+            🛡️ <b>Strict Privacy Compliance (Requirement 7):</b><br>
+            • Prints <b>ONLY</b> the large bold token number and its valid Code 128 barcode.<br>
+            • Omits hospital logos, patient names, timestamps, room numbers, and clinical details.<br>
+            • Barcode directly maps to the active patient visit in the database.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VIEW 3: DOCTOR CLINICAL WORKSTATION                              -->
+  <!-- ================================================================ -->
+  <div id="view-doctor" class="tab-pane app-view-container">
+    
+    <!-- Doctor Selector & Room Status Header -->
+    <div class="app-card" style="padding: 1.25rem 1.85rem;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--primary-navy);" id="activeDoctorTitle">Doctor Consultation Station</h2>
+          <select id="activeDoctorSelect" class="form-control" style="width: auto; min-width: 280px;" onchange="loadDoctorProfile()"></select>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <span id="doctorRoomBadge" class="status-badge-live status-consulting" style="font-size: 0.9rem;">Room: Room 01</span>
+          <span id="doctorDutyBadge" class="status-badge-live status-consulting" style="font-size: 0.9rem;">Duty: ON_DUTY</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2.A: Token Barcode Scanner & Direct Patient Access -->
+    <div class="app-card" style="margin-bottom: 1.5rem; background: var(--medical-blue-light); border: 1.5px solid #bfdbfe;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--primary-navy);">
+            📷 Scan Patient Token / Card Barcode
+          </h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Scan patient queue barcode via USB scanner or enter token to instantly retrieve authorized patient clinical profile.
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex: 1; max-width: 450px;">
+          <input type="text" id="doctorBarcodeScanInput" class="form-control" placeholder="Scan or enter token (e.g. OPD-001)" onkeypress="if(event.key === 'Enter') doctorScanTokenBarcode()">
+          <button class="btn-primary" onclick="doctorScanTokenBarcode()">Scan / Open</button>
+        </div>
+      </div>
+      <div id="doctorBarcodeAlert" style="display: none; margin-top: 0.75rem; font-size: 0.85rem; font-weight: 700;"></div>
+    </div>
+
+    <!-- Protected Personal Details Banner (Section 2.C: Doctors Cannot Modify Core Personal Details) -->
+    <div id="doctorPatientIdentityBanner" class="app-card" style="display: none; margin-bottom: 1.5rem; border-left: 5px solid var(--accent-teal);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <h3 id="docPatBannerName" style="font-size: 1.35rem; font-weight: 900; color: var(--primary-navy);">-</h3>
+            <span class="sample-notice-pill" style="background: var(--accent-teal-light); color: var(--accent-teal-dark);">Confidential Consultation</span>
+          </div>
+          <div style="display: flex; gap: 1.25rem; font-size: 0.85rem; margin-top: 0.35rem; color: var(--text-muted); flex-wrap: wrap;">
+            <span>Hospital ID: <b id="docPatBannerHospId" style="color: var(--primary-navy);">-</b></span>
+            <span>DOB / Age: <b id="docPatBannerDob">-</b></span>
+            <span>Gender: <b id="docPatBannerGender">-</b></span>
+            <span>Blood Group: <b id="docPatBannerBlood" style="color: var(--danger-rose);">-</b></span>
+            <span>Allergies: <b id="docPatBannerAllergies" style="color: var(--danger-rose);">-</b></span>
+          </div>
+        </div>
+        <div>
+          <button class="btn-outline" style="font-size: 0.75rem; border-color: #cbd5e1;" onclick="openDoctorCorrectionModal()">
+            Request Info Correction to Admin
+          </button>
+        </div>
+      </div>
+      <div style="margin-top: 0.6rem; font-size: 0.75rem; color: var(--text-muted); background: #f8fafc; padding: 0.4rem 0.75rem; border-radius: 4px;">
+        🔒 <b>Doctor Role Security Boundary:</b> Core identity attributes (Name, DOB, NIC, Contact) are protected and immutable by medical staff per hospital compliance.
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 2rem;">
+      <!-- Left: Queue Calling Controls -->
+      <div>
+        <div class="app-card">
+          <div class="app-card-header">
+            <h3 class="app-card-title">Live Calling Console</h3>
+            <span id="queueDeptLabel" class="sample-notice-pill" style="background: var(--medical-blue-light); color: var(--medical-blue);">Shared OPD Queue</span>
+          </div>
+
+          <div style="text-align: center; padding: 1.5rem 0; border-bottom: 1px solid var(--border-light);">
+            <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;">CURRENTLY ATTENDING</div>
+            <div id="docCurrentTokenBadge" style="font-size: 3.4rem; font-weight: 900; color: var(--accent-teal); letter-spacing: 2px;">—</div>
+            <div id="docCurrentPatientName" style="font-size: 1.2rem; font-weight: 800; color: var(--primary-navy); margin-top: 0.25rem;">No Patient Called</div>
+            <div id="docCurrentHospitalNo" style="font-size: 0.85rem; color: var(--text-muted);">Examination Room Ready</div>
+
+            <div style="display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap;">
+              <button id="btnCallNext" class="btn-primary" style="font-size: 1rem; padding: 0.85rem 1.8rem;" onclick="doctorCallNext()">
+                Call NEXT Patient
+              </button>
+              <button id="btnRecall" class="btn-teal" style="display: none;" onclick="doctorRecall()">
+                Recall Chime
+              </button>
+              <button id="btnMissed" class="btn-outline" style="display: none; border-color: var(--danger-rose); color: var(--danger-rose);" onclick="doctorMarkMissed()">
+                Mark Missed
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top: 1rem; padding: 0.85rem; background: var(--accent-teal-light); border-radius: 8px; border: 1px solid #99f6e4; font-size: 0.85rem; color: var(--accent-teal-dark);">
+            🔒 <b>Atomic Concurrency Safeguard:</b> Multiple doctors clicking Call NEXT concurrently are guaranteed distinct waiting tokens with zero duplicate allocations.
+          </div>
+        </div>
+
+        <!-- Waiting Queue Snapshot -->
+        <div class="app-card">
+          <div class="app-card-header">
+            <h4 class="app-card-title" style="font-size: 1rem;">Waiting Line Status</h4>
+            <span id="waitingCountBadge" class="status-badge-live status-calling">0 Waiting</span>
+          </div>
+          <div id="sessionWaitingList" style="max-height: 220px; overflow-y: auto; font-size: 0.85rem;"></div>
+        </div>
+      </div>
+
+      <!-- Right: Clinical Consultation Form & Longitudinal Records -->
+      <div>
+        <div class="app-card">
+          <div class="app-card-header">
+            <h3 class="app-card-title">Longitudinal Medical Record & Consultation</h3>
+            <button class="btn-outline" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;" onclick="viewPastRecords()">
+              Past History & Investigations
+            </button>
+          </div>
+
+          <div id="clinicalFormContainer">
+            <div style="margin-bottom: 1rem;">
+              <label class="form-label">Presenting Symptoms & Vitals:</label>
+              <input type="text" id="consultSymptoms" class="form-control" placeholder="e.g. Fever x 4 days, myalgia, BP 120/80">
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+              <label class="form-label">Provisional / Confirmed Diagnosis:</label>
+              <input type="text" id="consultDiagnosis" class="form-control" placeholder="e.g. Dengue Viral Fever - Early Phase">
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+              <label class="form-label">Clinical Observations & Examination Notes:</label>
+              <textarea id="consultNotes" class="form-control" rows="2" placeholder="Clinical findings, hydration status, auscultation..."></textarea>
+            </div>
+
+            <!-- Doctor Recommendations & Patient Follow-up Instructions (Section 2.B) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+              <div>
+                <label class="form-label">Recommendations & Home Advice:</label>
+                <textarea id="consultRecommendations" class="form-control" rows="2" placeholder="e.g. Complete bed rest, maintain 2.5L fluid balance..."></textarea>
+              </div>
+              <div>
+                <label class="form-label">Follow-Up Instructions & Warnings:</label>
+                <textarea id="consultFollowUpAdvice" class="form-control" rows="2" placeholder="e.g. Return immediately if warning signs or bleeding occur..."></textarea>
+              </div>
+            </div>
+
+            <!-- Prescriptions & Lab Requests (Section 2.B) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+              <div style="background: var(--bg-page); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                <label class="form-label">Prescription (Rx):</label>
+                <input type="text" id="prescItem" class="form-control" placeholder="Medicine: Paracetamol 500mg" style="margin-bottom: 0.4rem;">
+                <input type="text" id="prescDosage" class="form-control" placeholder="Dose & Freq: 1-2 tabs TDS for 3 days">
+              </div>
+              <div style="background: var(--bg-page); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--border-light);">
+                <label class="form-label">Laboratory Investigation Request:</label>
+                <input type="text" id="labItem" class="form-control" placeholder="e.g. Full Blood Count (FBC)" style="margin-bottom: 0.4rem;">
+                <select id="labUrgency" class="form-control">
+                  <option value="ROUTINE">Routine</option>
+                  <option value="URGENT">Urgent</option>
+                  <option value="STAT">STAT / Emergency</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Follow-up Task Creation & Referral (Section 2.B) -->
+            <div style="background: var(--bg-page); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 1.25rem;">
+              <div style="font-weight: 700; font-size: 0.85rem; color: var(--primary-navy); margin-bottom: 0.4rem;">Create Follow-Up Care-Plan Task for Patient:</div>
+              <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 0.75rem;">
+                <input type="text" id="customTaskTitle" class="form-control" placeholder="Task title (e.g. Attend Repeat Blood Count)">
+                <input type="date" id="customTaskDueDate" class="form-control">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+              <button class="btn-outline" style="flex: 1;" onclick="doctorReviewBeforeSaving()">
+                Review Before Finalizing
+              </button>
+              <button class="btn-teal" style="flex: 1.5; padding: 0.85rem;" onclick="doctorCompleteConsultation()">
+                Finalize & Save Clinical Record
+              </button>
+            </div>
+          </div>
+
+          <div id="pastHistoryDrawer" style="display: none; margin-top: 1.25rem; border-top: 1px solid var(--border-light); padding-top: 1rem;">
+            <h4 style="color: var(--primary-navy); font-size: 0.95rem; margin-bottom: 0.5rem;">Historical Encounters</h4>
+            <div id="pastConsultationsList" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VIEW 4: PATIENT PORTAL DASHBOARD                                 -->
+  <!-- ================================================================ -->
+  <div id="view-patient" class="tab-pane app-view-container">
+    <div style="max-width: 640px; margin: 0 auto;">
+      <div class="app-card" style="border-top: 4px solid var(--accent-teal);">
+        <div class="app-card-header">
+          <h2 class="app-card-title">Patient Personal Health Portal</h2>
+          <span class="sample-notice-pill" style="background: var(--accent-teal-light); color: var(--accent-teal-dark);">Confidential</span>
+        </div>
+
+        <!-- Profile Details -->
+        <div style="background: var(--bg-page); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light); margin-bottom: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <h3 id="patientDashName" style="font-size: 1.3rem; font-weight: 800; color: var(--primary-navy);">-</h3>
+              <div id="patientDashHospNo" style="font-size: 0.85rem; color: var(--accent-teal); font-weight: 700;">Hospital No: -</div>
+            </div>
+            <button class="btn-outline" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;" onclick="loadPatientOwnHistory()">
+              View My Medical History
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Token Display -->
+        <div style="background: var(--medical-blue-light); border: 1.5px solid #bfdbfe; border-radius: var(--radius-md); padding: 1.75rem; text-align: center; margin-bottom: 1.5rem;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">YOUR ACTIVE QUEUE TOKEN</div>
+          <div id="patientDashToken" style="font-size: 3.5rem; font-weight: 900; color: var(--primary-navy); letter-spacing: 2px; margin: 0.25rem 0;">None</div>
+          <div id="patientDashSession" style="font-size: 0.9rem; color: var(--text-muted);">No active hospital session</div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.25rem;">
+            <div style="background: #ffffff; padding: 1rem; border-radius: 8px; border: 1px solid #bfdbfe;">
+              <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">PATIENTS AHEAD</div>
+              <div id="patientDashAhead" style="font-size: 1.8rem; font-weight: 900; color: var(--primary-navy);">—</div>
+            </div>
+            <div style="background: #ffffff; padding: 1rem; border-radius: 8px; border: 1px solid #bfdbfe;">
+              <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">ESTIMATED WAIT</div>
+              <div id="patientDashEta" style="font-size: 1.8rem; font-weight: 900; color: var(--accent-teal);">—</div>
+            </div>
+          </div>
+
+          <div id="patientDashRoomAlert" style="margin-top: 1.25rem; background: #ffffff; border: 1px solid var(--accent-teal); padding: 0.85rem; border-radius: 8px;">
+            <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">ASSIGNED ROOM STATUS:</div>
+            <div id="patientDashRoom" style="font-size: 1.15rem; font-weight: 800; color: var(--primary-navy);">Pending until called</div>
+          </div>
+        </div>
+
+        <!-- Patient Care Plan & Tasks Section (Section 1.C) -->
+        <div style="margin-bottom: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h4 style="font-size: 1.1rem; font-weight: 800; color: var(--primary-navy);">My Care Plan & Action Tasks</h4>
+            <span id="patientTaskSummaryBadge" class="status-badge-live status-calling">0 Pending Tasks</span>
+          </div>
+          <div id="patientCareTasksList">
+            <!-- Dynamic task cards loaded via API -->
+          </div>
+        </div>
+
+        <!-- In-App Notification Centre (Section 1.D) -->
+        <div style="margin-bottom: 1.5rem; background: var(--bg-page); padding: 1.25rem; border-radius: var(--radius-md); border: 1.5px solid var(--border-light);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <h4 style="font-size: 1.05rem; font-weight: 800; color: var(--primary-navy);">Notifications & Reminders</h4>
+            <span id="notificationUnreadCount" class="sample-notice-pill" style="background: var(--danger-rose); color: #fff;">0 New</span>
+          </div>
+          <div id="patientNotificationsList" style="max-height: 180px; overflow-y: auto;"></div>
+        </div>
+
+        <!-- Laboratory Investigation Results (Section 4) -->
+        <div style="margin-bottom: 1.5rem;">
+          <h4 style="font-size: 1.05rem; font-weight: 800; color: var(--primary-navy); margin-bottom: 0.75rem;">Laboratory Reports & Investigation Status</h4>
+          <div id="patientLabResultsList"></div>
+        </div>
+
+        <!-- Advance Appointments -->
+        <div>
+          <h4 style="font-size: 1.05rem; font-weight: 800; color: var(--primary-navy); margin-bottom: 0.75rem;">Your Advance Appointments</h4>
+          <div id="patientAppointmentsList"></div>
+        </div>
+
+        <!-- Chronological Medical History Drawer (Section 1.B) -->
+        <div id="patientOwnHistoryContainer" style="display: none; margin-top: 1.5rem; background: #ffffff; padding: 1.5rem; border-radius: var(--radius-md); border: 2px solid var(--accent-teal);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h4 style="color: var(--primary-navy); font-size: 1.15rem; font-weight: 800;">Chronological Medical History</h4>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Verified Physician Records</span>
+          </div>
+          <div id="patientOwnHistoryList" style="max-height: 320px; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VIEW 5: ADMIN MANAGEMENT DASHBOARD                               -->
+  <!-- ================================================================ -->
+  <!-- ================================================================ -->
+  <!-- VIEW 5: ADMIN MANAGEMENT DASHBOARD (Section 3.A, 3.B, 3.C, 3.D)  -->
+  <!-- ================================================================ -->
+  <div id="view-admin" class="tab-pane app-view-container">
+    
+    <!-- Admin Header Banner -->
+    <div class="app-card" style="padding: 1.25rem 2rem; margin-bottom: 1.5rem; border-top: 4px solid var(--primary-navy);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2 style="font-size: 1.4rem; font-weight: 800; color: var(--primary-navy);">Hospital Operations & Administrative Hub</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">Real-time control over patient registration, clinical roster, advance appointments, and system integrity.</p>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+          <button class="btn-primary" onclick="openAdminRegisterPatientModal()">+ Register New Patient</button>
+          <button class="btn-outline" onclick="loadAdminData()">Refresh Hub</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Administrative Sub-Navigation Tabs -->
+    <div class="admin-tab-nav">
+      <button id="adminTabBtn-ops" class="admin-tab-btn active" onclick="switchAdminTab('ops')">Hospital Operations</button>
+      <button id="adminTabBtn-patients" class="admin-tab-btn" onclick="switchAdminTab('patients')">Patient Management</button>
+      <button id="adminTabBtn-appts" class="admin-tab-btn" onclick="switchAdminTab('appts')">Appointment Management</button>
+      <button id="adminTabBtn-doctors" class="admin-tab-btn" onclick="switchAdminTab('doctors')">Doctors & Rosters</button>
+      <button id="adminTabBtn-audits" class="admin-tab-btn" onclick="switchAdminTab('audits')">Audit & Security Logs</button>
+    </div>
+
+    <!-- TAB 1: OPERATIONS OVERVIEW (Section 3.D) -->
+    <div id="adminTab-ops" class="admin-sub-pane active">
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light); box-shadow: var(--shadow-sm);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">TOTAL REGISTERED PATIENTS</div>
+          <div id="statTotalPatients" style="font-size: 2.2rem; font-weight: 900; color: var(--primary-navy);">0</div>
+          <div style="font-size: 0.75rem; color: var(--accent-teal); font-weight: 600;">Verified Health Records</div>
+        </div>
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light); box-shadow: var(--shadow-sm);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">APPOINTMENTS TODAY</div>
+          <div id="statApptsToday" style="font-size: 2.2rem; font-weight: 900; color: var(--medical-blue);">0</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">Scheduled & Walk-ins</div>
+        </div>
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light); box-shadow: var(--shadow-sm);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">ACTIVE WAITING QUEUE</div>
+          <div id="statActiveWaiting" style="font-size: 2.2rem; font-weight: 900; color: var(--warning-amber);">0</div>
+          <div style="font-size: 0.75rem; color: var(--warning-amber); font-weight: 600;">Awaiting Room Call</div>
+        </div>
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light); box-shadow: var(--shadow-sm);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">IN CONSULTATION</div>
+          <div id="statInService" style="font-size: 2.2rem; font-weight: 900; color: var(--accent-teal);">0</div>
+          <div style="font-size: 0.75rem; color: var(--success-green); font-weight: 600;">Active Clinical Sessions</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; margin-bottom: 2rem;">
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">COMPLETED TODAY</div>
+          <div id="statCompleted" style="font-size: 2rem; font-weight: 900; color: var(--success-green);">0</div>
+        </div>
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">DOCTORS ON DUTY</div>
+          <div id="statOnDutyDoctors" style="font-size: 2rem; font-weight: 900; color: var(--primary-navy);">0</div>
+        </div>
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">PENDING LAB INVESTIGATIONS</div>
+          <div id="statPendingLabs" style="font-size: 2rem; font-weight: 900; color: #db2777;">0</div>
+        </div>
+        <div style="background: #ffffff; padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">OUTSTANDING PATIENT TASKS</div>
+          <div id="statOutstandingTasks" style="font-size: 2rem; font-weight: 900; color: #7c3aed;">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: PATIENT MANAGEMENT (Section 3.A) -->
+    <div id="adminTab-patients" class="admin-sub-pane">
+      <div class="app-card">
+        <div class="app-card-header">
+          <h3 class="app-card-title">Registered Hospital Patients</h3>
+          <input type="text" id="adminPatientSearchInput" class="form-control" style="width: 320px;" placeholder="Search by name, hospital no, phone..." oninput="filterAdminPatients()">
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="queue-table-styled">
+            <thead>
+              <tr>
+                <th>Hospital No</th>
+                <th>Patient Name</th>
+                <th>DOB / Gender</th>
+                <th>Phone</th>
+                <th>Blood / Allergies</th>
+                <th>Consultations</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminPatientsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: APPOINTMENT MANAGEMENT (Section 3.C) -->
+    <div id="adminTab-appts" class="admin-sub-pane">
+      <div class="app-card">
+        <div class="app-card-header">
+          <h3 class="app-card-title">Hospital Appointment Schedule & Queuing Link</h3>
+          <div style="display: flex; gap: 0.5rem;">
+            <select id="adminApptStatusFilter" class="form-control" style="width: 180px;" onchange="filterAdminAppointments()">
+              <option value="ALL">All Statuses</option>
+              <option value="APPOINTED">APPOINTED</option>
+              <option value="CHECKED_IN">CHECKED_IN</option>
+              <option value="RESCHEDULED">RESCHEDULED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="queue-table-styled">
+            <thead>
+              <tr>
+                <th>Reference</th>
+                <th>Patient</th>
+                <th>Clinic Session</th>
+                <th>Assigned Doctor</th>
+                <th>Scheduled Time</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminAppointmentsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: DOCTORS & ROSTER (Section 3.B) -->
+    <div id="adminTab-doctors" class="admin-sub-pane">
+      <div class="app-card">
+        <div class="app-card-header">
+          <h3 class="app-card-title">Doctor Duty Rosters & Room Assignments</h3>
+        </div>
+        <div id="adminDoctorRosterList" style="display: flex; flex-direction: column; gap: 0.85rem;"></div>
+      </div>
+    </div>
+
+    <!-- TAB 5: AUDIT LOGS (Section 3.A, 7) -->
+    <div id="adminTab-audits" class="admin-sub-pane">
+      <div class="app-card">
+        <div class="app-card-header">
+          <h3 class="app-card-title">Clinical & Administrative Audit Trail</h3>
+          <span class="sample-notice-pill" style="background: var(--medical-blue-light); color: var(--medical-blue);">Immutable System Trail</span>
+        </div>
+        <div id="auditLogList" style="max-height: 480px; overflow-y: auto; font-size: 0.85rem; font-family: monospace;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VIEW 6: LABORATORY & INVESTIGATIONS WORKFLOW (Section 4)         -->
+  <!-- ================================================================ -->
+  <div id="view-lab" class="tab-pane app-view-container">
+    <div class="app-card" style="margin-bottom: 1.5rem; border-top: 4px solid #db2777;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--primary-navy);">
+            🔬 Diagnostic Pathology & Laboratory Workflow Station
+          </h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Receive doctor requests, record specimen collection, enter official clinical results, and release verified reports.
+          </p>
+        </div>
+        <div>
+          <button class="btn-outline" onclick="loadLabRequests()">Refresh Investigations</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Laboratory Requests Queue Table -->
+    <div class="app-card">
+      <div class="app-card-header">
+        <h3 class="app-card-title">Pending & Active Laboratory Investigations</h3>
+        <span id="labRequestsCountBadge" class="status-badge-live status-calling">0 Pending</span>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="queue-table-styled">
+          <thead>
+            <tr>
+              <th>Request Date</th>
+              <th>Patient</th>
+              <th>Test Name</th>
+              <th>Requesting Doctor</th>
+              <th>Urgency</th>
+              <th>Workflow Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="labRequestsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VIEW 6: LIVE KIOSK TV DIGITAL SIGNAGE                            -->
+  <!-- ================================================================ -->
+  <div id="view-display" class="tab-pane app-view-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <div style="display: flex; gap: 0.75rem;">
+        <button class="btn-primary" onclick="switchDisplayChannel('OPD')">Shared OPD TV Display</button>
+        <button class="btn-outline" onclick="switchDisplayChannel('CL-A')">Clinic A Specialist TV Display</button>
+      </div>
+      <div style="font-size: 0.9rem; color: var(--text-muted); font-weight: 600;">
+        Digital Signage Mode (1080p / 4K Kiosk)
+      </div>
+    </div>
+
+    <div class="live-queue-preview-box" style="border: 2px solid var(--primary-navy);">
+      <div class="live-queue-header">
+        <div>
+          <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.85;">
+            National Institute of Infectious Diseases (NIID / IDH)
+          </div>
+          <div style="font-size: 1.6rem; font-weight: 900;" id="tvDisplayHeaderTitle">
+            MAIN OUTPATIENT DEPARTMENT (OPD) QUEUE
+          </div>
+        </div>
+        <div style="font-size: 1.5rem; font-weight: 800; font-family: monospace;" id="tvDigitalClock">09:32:00 AM</div>
+      </div>
+
+      <table class="queue-table-styled">
+        <thead>
+          <tr>
+            <th style="width: 25%;">Consultation Room</th>
+            <th style="width: 35%;">Assigned Doctor</th>
+            <th style="width: 20%;">Current Token</th>
+            <th style="width: 20%;">Room Status</th>
+          </tr>
+        </thead>
+        <tbody id="tvGridBody"></tbody>
+      </table>
+
+      <div style="background: var(--bg-page); padding: 1.25rem 2rem; border-top: 2px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <span style="font-weight: 800; color: var(--primary-navy);">NEXT WAITING TOKEN:</span>
+          <span class="token-pill-badge" id="tvNextWaitingToken">—</span>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-muted);">
+          🔊 Audio Chime Active | Real-time WebSocket Synchronized
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- MODAL: ADVANCE APPOINTMENT BOOKING                               -->
+  <!-- ================================================================ -->
+  <div id="appointmentModal" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Book Doctor Appointment</h3>
+        <button class="modal-close-btn" onclick="closeAppointmentModal()">&times;</button>
+      </div>
+      <form onsubmit="event.preventDefault(); submitAdvanceAppointment();">
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label">Select Patient:</label>
+          <select id="bookingPatientSelect" class="form-control" required></select>
+        </div>
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label">Clinic / Service Session:</label>
+          <select id="bookingSessionSelect" class="form-control" required></select>
+        </div>
+        <div style="margin-bottom: 1.5rem;">
+          <label class="form-label">Preferred Time Window:</label>
+          <input type="time" id="bookingTimeInput" class="form-control" value="09:30" required>
+        </div>
+        <button type="submit" class="btn-teal" style="width: 100%; padding: 0.85rem;">
+          Confirm & Book Appointment
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- MODAL: DEDICATED LOGIN PORTAL (Admin, Doctor, Patient)           -->
+  <!-- ================================================================ -->
+  <div id="loginModalOverlay" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Hospital System Login</h3>
+        <button class="modal-close-btn" onclick="closeLoginModal()">&times;</button>
+      </div>
+
+      <!-- Portal Switcher -->
+      <div class="login-portal-switch" style="flex-wrap: wrap; gap: 0.25rem;">
+        <button id="portalBtn-admin" class="portal-switch-btn active" onclick="switchLoginPortal('admin')">Admin</button>
+        <button id="portalBtn-doctor" class="portal-switch-btn" onclick="switchLoginPortal('doctor')">Doctor</button>
+        <button id="portalBtn-patient" class="portal-switch-btn" onclick="switchLoginPortal('patient')">Patient</button>
+        <button id="portalBtn-lab" class="portal-switch-btn" onclick="switchLoginPortal('lab')">Laboratory</button>
+        <button id="portalBtn-receptionist" class="portal-switch-btn" onclick="switchLoginPortal('receptionist')">Reception</button>
+      </div>
+
+      <form onsubmit="event.preventDefault(); submitLogin();">
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label">Username / Account ID:</label>
+          <input type="text" id="loginUsername" class="form-control" placeholder="e.g. admin" required>
+        </div>
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label">Password:</label>
+          <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" required>
+        </div>
+
+        <div style="background: var(--bg-page); padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-light); margin-bottom: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">
+          <b>Sample Development Credentials:</b><br>
+          <span id="demoCredHint">Admin: <code>admin</code> / <code>Admin@123</code></span>
+        </div>
+
+        <div id="loginErrorAlert" style="display: none; background: #ffe4e6; border: 1px solid #fecdd3; color: #be123c; padding: 0.65rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem;"></div>
+
+        <button type="submit" class="btn-primary" style="width: 100%; padding: 0.85rem;">
+          Authenticate & Access Portal
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- MODAL: ENTER & RELEASE LABORATORY RESULT (Section 4)             -->
+  <!-- ================================================================ -->
+  <div id="labResultModal" class="modal-overlay">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 id="labModalTitle">Release Laboratory Investigation</h3>
+        <button class="modal-close-btn" onclick="closeLabResultModal()">&times;</button>
+      </div>
+      <form onsubmit="event.preventDefault(); submitReleaseLabResult();">
+        <input type="hidden" id="labModalRequestId">
+        <div style="background: var(--bg-page); padding: 0.85rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem;">
+          <div>Patient: <b id="labModalPatient">-</b></div>
+          <div>Investigation: <b id="labModalTest" style="color: #db2777;">-</b></div>
+          <div>Requesting Doctor: <span id="labModalDoctor">-</span></div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label">Workflow Status Progression:</label>
+          <select id="labModalStatus" class="form-control">
+            <option value="RESULT_RELEASED">RESULT_RELEASED (Final & Verified)</option>
+            <option value="SAMPLE_COLLECTED">SAMPLE_COLLECTED (Specimen Received)</option>
+            <option value="IN_PROGRESS">IN_PROGRESS (Analyzing)</option>
+            <option value="RESULT_PENDING_REVIEW">RESULT_PENDING_REVIEW (Awaiting Pathologist)</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label class="form-label">Official Investigation Findings & Values:</label>
+          <textarea id="labModalResultText" class="form-control" rows="4" placeholder="Enter numerical values, reference ranges, and pathologist notes..." required></textarea>
+        </div>
+
+        <button type="submit" class="btn-primary" style="width: 100%; padding: 0.85rem; background: #db2777;">
+          Sign & Release Official Laboratory Result
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- MODAL: DOCTOR CONSULTATION REVIEW SUMMARY (Section 2.B)          -->
+  <!-- ================================================================ -->
+  <div id="doctorReviewModal" class="modal-overlay">
+    <div class="modal-dialog" style="max-width: 560px;">
+      <div class="modal-header">
+        <h3>Review Consultation Before Finalizing</h3>
+        <button class="modal-close-btn" onclick="closeDoctorReviewModal()">&times;</button>
+      </div>
+      <div id="doctorReviewContent" style="font-size: 0.9rem; line-height: 1.6; max-height: 400px; overflow-y: auto; background: var(--bg-page); padding: 1.25rem; border-radius: 8px; margin-bottom: 1.25rem;"></div>
+      <div style="display: flex; gap: 0.75rem;">
+        <button class="btn-outline" style="flex: 1;" onclick="closeDoctorReviewModal()">Edit Form</button>
+        <button class="btn-teal" style="flex: 1.5;" onclick="closeDoctorReviewModal(); doctorCompleteConsultation();">Confirm & Finalize Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- MODAL: DOCTOR REQUEST INFO CORRECTION TO ADMIN (Section 2.C)     -->
+  <!-- ================================================================ -->
+  <div id="doctorCorrectionModal" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Request Personal Info Correction</h3>
+        <button class="modal-close-btn" onclick="closeDoctorCorrectionModal()">&times;</button>
+      </div>
+      <form onsubmit="event.preventDefault(); submitDoctorCorrectionRequest();">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          To preserve patient identity safety and regulatory compliance, medical staff may not directly overwrite core identification. Submit this verified correction request for hospital admin authorization.
+        </p>
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label">Proposed Correction (e.g. Correct DOB, Legal Name, Contact):</label>
+          <textarea id="correctionProposedInput" class="form-control" rows="3" required placeholder="Specify correct details..."></textarea>
+        </div>
+        <div style="margin-bottom: 1.25rem;">
+          <label class="form-label">Reason / Clinical Justification:</label>
+          <input type="text" id="correctionReasonInput" class="form-control" placeholder="e.g. NIC verification during admission" required>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; padding: 0.85rem;">
+          Submit Request to Hospital Admin
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- MODAL: ADMIN REGISTER NEW PATIENT (Section 3.A)                  -->
+  <!-- ================================================================ -->
+  <div id="adminRegisterPatientModal" class="modal-overlay">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3>Register New Hospital Patient</h3>
+        <button class="modal-close-btn" onclick="closeAdminRegisterPatientModal()">&times;</button>
+      </div>
+      <form onsubmit="event.preventDefault(); submitAdminRegisterPatient();">
+        <div style="margin-bottom: 0.85rem;">
+          <label class="form-label">Full Name:</label>
+          <input type="text" id="regPatName" class="form-control" placeholder="e.g. Kasun Fernando" required>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+          <div>
+            <label class="form-label">Date of Birth:</label>
+            <input type="date" id="regPatDob" class="form-control" required>
+          </div>
+          <div>
+            <label class="form-label">Gender:</label>
+            <select id="regPatGender" class="form-control" required>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+          <div>
+            <label class="form-label">Phone Number:</label>
+            <input type="tel" id="regPatPhone" class="form-control" placeholder="07XXXXXXXX" required>
+          </div>
+          <div>
+            <label class="form-label">Blood Group:</label>
+            <select id="regPatBlood" class="form-control">
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom: 0.85rem;">
+          <label class="form-label">Known Allergies:</label>
+          <input type="text" id="regPatAllergies" class="form-control" placeholder="e.g. Penicillin, Aspirin or None">
+        </div>
+        <div style="margin-bottom: 1.25rem;">
+          <label class="form-label">Residential Address:</label>
+          <input type="text" id="regPatAddress" class="form-control" placeholder="e.g. 124 Galle Road, Colombo">
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; padding: 0.85rem;">
+          Register & Create Patient Portal Account
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- MODAL: ADMIN EDIT PATIENT PROFILE (Section 3.A)                  -->
+  <!-- ================================================================ -->
+  <div id="adminEditPatientModal" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Correct / Update Patient Profile</h3>
+        <button class="modal-close-btn" onclick="closeAdminEditPatientModal()">&times;</button>
+      </div>
+      <form onsubmit="event.preventDefault(); submitAdminUpdatePatient();">
+        <input type="hidden" id="editPatId">
+        <div style="margin-bottom: 0.85rem;">
+          <label class="form-label">Full Name:</label>
+          <input type="text" id="editPatName" class="form-control" required>
+        </div>
+        <div style="margin-bottom: 0.85rem;">
+          <label class="form-label">Phone Number:</label>
+          <input type="text" id="editPatPhone" class="form-control" required>
+        </div>
+        <div style="margin-bottom: 0.85rem;">
+          <label class="form-label">Blood Group:</label>
+          <input type="text" id="editPatBlood" class="form-control">
+        </div>
+        <div style="margin-bottom: 0.85rem;">
+          <label class="form-label">Known Allergies:</label>
+          <input type="text" id="editPatAllergies" class="form-control">
+        </div>
+        <div style="margin-bottom: 1.25rem;">
+          <label class="form-label">Address:</label>
+          <input type="text" id="editPatAddress" class="form-control">
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; padding: 0.85rem;">
+          Save Changes & Update Audit Trail
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- FOOTER (Asiri Health Inspired Structure)                         -->
+  <!-- ================================================================ -->
+  <footer id="section-contact" class="hospital-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <h3>HOSPITAL QUEUE MANAGEMENT SYSTEM</h3>
+        <p>
+          Transforming healthcare delivery through smart outpatient flow orchestration, instant barcode verification, and longitudinal clinical documentation.
+        </p>
+        <div style="margin-top: 1.25rem; font-size: 0.85rem; color: #cbd5e1;">
+          📍 Angoda, Colombo, Sri Lanka<br>
+          📞 24/7 Helpline: +94 (11) 452 4400
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h4>Our Services</h4>
+        <ul class="footer-links">
+          <li><button onclick="navigateToSection('services')">Doctor Appointments</button></li>
+          <li><button onclick="navigateToSection('reception')">Patient Check-In</button></li>
+          <li><button onclick="navigateToSection('reception')">Queue Token Generation</button></li>
+          <li><button onclick="navigateToSection('queue')">Live Queue Status</button></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Quick Portals</h4>
+        <ul class="footer-links">
+          <li><button onclick="openLoginModal('patient')">Patient Health Portal</button></li>
+          <li><button onclick="openLoginModal('doctor')">Doctor Workstation</button></li>
+          <li><button onclick="openLoginModal('admin')">Hospital Administrator</button></li>
+          <li><button onclick="navigateToSection('display')">Live TV Signage</button></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Emergency Services</h4>
+        <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.75rem;">
+          Emergency triage and critical care ambulance dispatch services operate 24 hours a day.
+        </p>
+        <div style="font-size: 1.35rem; font-weight: 900; color: #5eead4;">Dial 1990</div>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div>&copy; 2026 Hospital Queue Management System. All Rights Reserved.</div>
+      <div>Designed with clean healthcare aesthetics inspired by modern private medical centers.</div>
+    </div>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

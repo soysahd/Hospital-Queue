@@ -1,0 +1,1983 @@
+// Hospital Queue Management System - Asiri Health Inspired Client Controller
+
+const socket = io();
+
+// State
+let currentUser = null;
+let currentToken = localStorage.getItem('token') || null;
+let selectedPortal = 'admin';
+let allPatients = [];
+let allSessions = [];
+let allDoctors = [];
+let allRooms = [];
+let selectedPatient = null;
+let currentDisplaySession = 'OPD';
+let activeDoctorId = 'doc-1';
+let currentAttendingToken = null;
+let currentIssuedToken = null;
+
+// Initial bootstrap
+document.addEventListener('DOMContentLoaded', async () => {
+  initHeroSlider();
+  setupSocketListeners();
+  startClock();
+  await checkAuthSession();
+  await loadBaseData();
+  await refreshLiveQueueBoard();
+  renderBarcode('OPD-001');
+});
+
+// ============================================================================
+// HERO SLIDER CONTROLLER (Asiri Health Inspired)
+// Smooth crossfade, subtle zoom, automatic 5s transitions, hover pause, dots & arrows
+// ============================================================================
+let heroCurrentSlide = 0;
+let heroSlideTimer = null;
+const HERO_SLIDE_DURATION = 5000;
+
+function initHeroSlider() {
+  const slider = document.getElementById('heroSlider');
+  if (!slider) return;
+
+  // Preload images for buttery smooth transitions
+  const heroImages = [
+    '/images/hospital-exterior.jpg',
+    '/images/hospital-reception.jpg',
+    '/images/modern-ot-theatre.jpg'
+  ];
+  heroImages.forEach(src => {
+    const img = new Image();
+    img.src = src;
+  });
+
+  // Pause on hover
+  slider.addEventListener('mouseenter', () => {
+    stopHeroSlider();
+  });
+  slider.addEventListener('mouseleave', () => {
+    startHeroSlider();
+  });
+
+  // Start auto transitions
+  startHeroSlider();
+}
+
+function startHeroSlider() {
+  stopHeroSlider();
+  heroSlideTimer = setInterval(() => {
+    nextHeroSlide();
+  }, HERO_SLIDE_DURATION);
+}
+
+function stopHeroSlider() {
+  if (heroSlideTimer) {
+    clearInterval(heroSlideTimer);
+    heroSlideTimer = null;
+  }
+}
+
+function goToHeroSlide(index) {
+  const slides = document.querySelectorAll('.hero-slider-wrapper .hero-slide');
+  const dots = document.querySelectorAll('.hero-dot');
+  if (!slides.length) return;
+
+  heroCurrentSlide = (index + slides.length) % slides.length;
+
+  slides.forEach((slide, idx) => {
+    if (idx === heroCurrentSlide) {
+      slide.classList.add('active');
+    } else {
+      slide.classList.remove('active');
+    }
+  });
+
+  dots.forEach((dot, idx) => {
+    if (idx === heroCurrentSlide) {
+      dot.classList.add('active');
+    } else {
+      dot.classList.remove('active');
+    }
+  });
+}
+
+function nextHeroSlide() {
+  goToHeroSlide(heroCurrentSlide + 1);
+}
+
+function prevHeroSlide() {
+  goToHeroSlide(heroCurrentSlide - 1);
+}
+
+// Digital Clock for Live TV Displays
+function startClock() {
+  setInterval(() => {
+    const el = document.getElementById('tvDigitalClock');
+    if (el) el.textContent = new Date().toLocaleTimeString();
+  }, 1000);
+}
+
+// Seamless Section & Tab Navigation
+function navigateToSection(target) {
+  // If navigating to home or homepage anchors
+  if (target === 'home') {
+    showView('view-homepage');
+    setActiveNav('nav-home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  if (target === 'services') {
+    showView('view-homepage');
+    setActiveNav('nav-services');
+    const el = document.getElementById('section-services');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  if (target === 'queue') {
+    showView('view-homepage');
+    setActiveNav('nav-queue-status');
+    const el = document.getElementById('section-queue');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  if (target === 'about') {
+    showView('view-homepage');
+    setActiveNav('nav-about');
+    const el = document.getElementById('section-about');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  if (target === 'contact') {
+    showView('view-homepage');
+    setActiveNav('nav-contact');
+    const el = document.getElementById('section-contact');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  if (target === 'book') {
+    openAppointmentModal();
+    return;
+  }
+
+  // Application views (Reception, Doctor, Patient, Admin, Display)
+  if (target === 'reception') {
+    showView('view-reception');
+    setActiveNav('nav-reception');
+    return;
+  }
+  if (target === 'display') {
+    showView('view-display');
+    refreshDisplay();
+    return;
+  }
+
+  // Protected Role Views: Check Authentication
+  if (target === 'doctor') {
+    if (!currentUser || currentUser.role !== 'doctor' && currentUser.role !== 'admin') {
+      openLoginModal('doctor');
+      return;
+    }
+    showView('view-doctor');
+    loadDoctorProfile();
+    return;
+  }
+  if (target === 'patient') {
+    if (!currentUser || currentUser.role !== 'patient' && currentUser.role !== 'admin') {
+      openLoginModal('patient');
+      return;
+    }
+    showView('view-patient');
+    loadPatientDashboard();
+    return;
+  }
+  if (target === 'lab') {
+    if (!currentUser || (currentUser.role !== 'lab' && currentUser.role !== 'admin' && currentUser.role !== 'doctor')) {
+      openLoginModal('lab');
+      return;
+    }
+    showView('view-lab');
+    setActiveNav('nav-lab');
+    loadLabRequests();
+    return;
+  }
+  if (target === 'admin') {
+    if (!currentUser || currentUser.role !== 'admin') {
+      openLoginModal('admin');
+      return;
+    }
+    showView('view-admin');
+    setActiveNav('nav-admin');
+    loadAdminData();
+    return;
+  }
+}
+
+function showView(viewId) {
+  document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+  const target = document.getElementById(viewId);
+  if (target) {
+    target.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function setActiveNav(navId) {
+  document.querySelectorAll('.nav-link-btn').forEach(btn => btn.classList.remove('active'));
+  const target = document.getElementById(navId);
+  if (target) target.classList.add('active');
+}
+
+// Socket.IO Real-time Events
+function setupSocketListeners() {
+  socket.on('token.called', (data) => {
+    triggerCallAnnouncement(data);
+    refreshLiveQueueBoard();
+    refreshDisplay();
+    refreshDoctorConsole();
+    if (currentUser && currentUser.role === 'patient') loadPatientDashboard();
+  });
+
+  socket.on('queue.updated', () => {
+    refreshLiveQueueBoard();
+    refreshDisplay();
+    refreshDoctorConsole();
+    if (currentUser && currentUser.role === 'admin') loadAdminData();
+    if (currentUser && currentUser.role === 'patient') loadPatientDashboard();
+  });
+
+  socket.on('doctor.status_changed', () => {
+    refreshLiveQueueBoard();
+    refreshDisplay();
+    if (currentUser && currentUser.role === 'admin') loadAdminData();
+  });
+}
+
+// Two-tone Hospital Audio Chime & Visual Call Alert
+function triggerCallAnnouncement(data) {
+  const banner = document.getElementById('liveCallBanner');
+  document.getElementById('bannerToken').textContent = data.tokenNumber;
+  document.getElementById('bannerRoom').textContent = data.roomNumber;
+  banner.style.display = 'block';
+
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const playTone = (freq, start, duration) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(audioCtx.currentTime + start);
+      osc.stop(audioCtx.currentTime + start + duration);
+    };
+    playTone(659.25, 0, 0.4); // E5
+    playTone(523.25, 0.35, 0.6); // C5
+  } catch (e) {
+    console.log('Audio autoplay prevented');
+  }
+
+  setTimeout(() => { banner.style.display = 'none'; }, 6000);
+}
+
+// ==============================================================
+// AUTHENTICATION & SESSION MANAGEMENT (Requirement 4)
+// ==============================================================
+async function checkAuthSession() {
+  if (!currentToken) {
+    updateAuthUI(null);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/auth/me', {
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentUser = data.user;
+      updateAuthUI(currentUser);
+    } else {
+      localStorage.removeItem('token');
+      currentToken = null;
+      updateAuthUI(null);
+    }
+  } catch (e) {
+    updateAuthUI(null);
+  }
+}
+
+function updateAuthUI(user) {
+  const badge = document.getElementById('userProfileHeaderBadge');
+  const loginBtn = document.getElementById('headerLoginBtnContainer');
+
+  if (user) {
+    badge.style.display = 'flex';
+    loginBtn.style.display = 'none';
+    document.getElementById('headerUserName').textContent = user.fullName;
+    document.getElementById('headerUserRole').textContent = user.role.toUpperCase();
+  } else {
+    badge.style.display = 'none';
+    loginBtn.style.display = 'block';
+  }
+}
+
+function openLoginModal(portal = 'admin') {
+  switchLoginPortal(portal);
+  document.getElementById('loginModalOverlay').style.display = 'flex';
+}
+
+function closeLoginModal() {
+  document.getElementById('loginModalOverlay').style.display = 'none';
+}
+
+function switchLoginPortal(portal) {
+  selectedPortal = portal;
+  document.querySelectorAll('.portal-switch-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`portalBtn-${portal}`);
+  if (btn) btn.classList.add('active');
+
+  const hint = document.getElementById('demoCredHint');
+  const userInp = document.getElementById('loginUsername');
+  const passInp = document.getElementById('loginPassword');
+
+  if (portal === 'admin') {
+    hint.innerHTML = 'Admin: <code>admin</code> / <code>Admin@123</code>';
+    userInp.value = 'admin';
+    passInp.value = 'Admin@123';
+  } else if (portal === 'doctor') {
+    hint.innerHTML = 'Doctor: <code>doctor1</code> / <code>Doctor@123</code> (or doctor2..5)';
+    userInp.value = 'doctor1';
+    passInp.value = 'Doctor@123';
+  } else if (portal === 'patient') {
+    hint.innerHTML = 'Patient: <code>patient1</code> / <code>Patient@123</code> (Kamal Jayawardena)';
+    userInp.value = 'patient1';
+    passInp.value = 'Patient@123';
+  } else if (portal === 'lab') {
+    hint.innerHTML = 'Laboratory Staff: <code>labstaff</code> / <code>Staff@123</code>';
+    userInp.value = 'labstaff';
+    passInp.value = 'Staff@123';
+  } else if (portal === 'receptionist') {
+    hint.innerHTML = 'Reception Counter: <code>reception</code> / <code>Staff@123</code>';
+    userInp.value = 'reception';
+    passInp.value = 'Staff@123';
+  }
+}
+
+async function submitLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const alertEl = document.getElementById('loginErrorAlert');
+  alertEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, expectedRole: selectedPortal })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alertEl.textContent = data.error || 'Authentication failed.';
+      alertEl.style.display = 'block';
+      return;
+    }
+
+    localStorage.setItem('token', data.token);
+    currentToken = data.token;
+    currentUser = data.user;
+    updateAuthUI(currentUser);
+    closeLoginModal();
+
+    if (currentUser.role === 'admin') navigateToSection('admin');
+    else if (currentUser.role === 'doctor') {
+      activeDoctorId = currentUser.doctorId || 'doc-1';
+      navigateToSection('doctor');
+    }
+    else if (currentUser.role === 'patient') navigateToSection('patient');
+    else if (currentUser.role === 'lab') navigateToSection('lab');
+    else if (currentUser.role === 'receptionist') navigateToSection('reception');
+  } catch (err) {
+    alertEl.textContent = 'Network or server connection error.';
+    alertEl.style.display = 'block';
+  }
+}
+
+async function logout() {
+  if (currentToken) {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${currentToken}` }
+      });
+    } catch (e) {}
+  }
+  localStorage.removeItem('token');
+  currentToken = null;
+  currentUser = null;
+  updateAuthUI(null);
+  navigateToSection('home');
+}
+
+// ==============================================================
+// BASE DATA & HOMEPAGE LIVE QUEUE STATUS (Requirement 3)
+// ==============================================================
+async function loadBaseData() {
+  try {
+    const [pRes, sRes, dRes, rRes] = await Promise.all([
+      fetch('/api/patients').then(r => r.json()),
+      fetch('/api/sessions').then(r => r.json()),
+      fetch('/api/doctors').then(r => r.json()),
+      fetch('/api/rooms').then(r => r.json())
+    ]);
+
+    allPatients = pRes;
+    allSessions = sRes;
+    allDoctors = dRes;
+    allRooms = rRes;
+
+    renderQuickScanButtons();
+    populateSessionDropdowns();
+    populateDoctorDropdown();
+    populateAppointmentDropdowns();
+  } catch (err) {
+    console.error('Error loading base data:', err);
+  }
+}
+
+// Live Queue Board on Homepage (Sample Demonstration Data synced with live DB)
+async function refreshLiveQueueBoard() {
+  try {
+    const [opdData, clinicAData] = await Promise.all([
+      fetch('/api/displays/OPD').then(r => r.json()),
+      fetch('/api/displays/CL-A').then(r => r.json())
+    ]);
+
+    const tbody = document.getElementById('homeLiveQueueTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const rows = [];
+    if (opdData && opdData.rooms) {
+      opdData.rooms.forEach(r => {
+        rows.push({
+          session: 'General OPD Queue',
+          doctor: r.doctorName,
+          room: r.roomNumber,
+          currentToken: r.currentToken,
+          lastToken: opdData.nextWaitingToken || 'OPD-004',
+          wait: r.currentToken ? 'Now Serving' : '~8 min',
+          status: r.statusText
+        });
+      });
+    }
+    if (clinicAData && clinicAData.rooms) {
+      clinicAData.rooms.forEach(r => {
+        rows.push({
+          session: 'Specialist Fever Clinic A',
+          doctor: r.doctorName,
+          room: r.roomNumber,
+          currentToken: r.currentToken,
+          lastToken: clinicAData.nextWaitingToken || 'CL-A-002',
+          wait: r.currentToken ? 'Now Serving' : '~15 min',
+          status: r.statusText
+        });
+      });
+    }
+
+    rows.forEach(item => {
+      const tr = document.createElement('tr');
+      const isCalling = item.status.includes('Called');
+      const isConsulting = item.status.includes('Consulting');
+
+      tr.innerHTML = `
+        <td style="font-weight: 700; color: var(--primary-navy);">${item.session}</td>
+        <td><b>${item.doctor}</b></td>
+        <td><span style="font-weight: 700; color: var(--accent-teal);">${item.room}</span></td>
+        <td>${item.currentToken ? `<span class="token-pill-badge">${item.currentToken}</span>` : '<span style="color: var(--text-muted);">—</span>'}</td>
+        <td style="font-family: monospace; font-weight: 700;">${item.lastToken}</td>
+        <td style="font-weight: 600; color: var(--text-muted);">${item.wait}</td>
+        <td>
+          <span class="status-badge-live ${isCalling ? 'status-calling' : isConsulting ? 'status-consulting' : 'status-available'}">
+            ${item.status}
+          </span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (err) {
+    console.error('Error refreshing live queue board:', err);
+  }
+}
+
+// ==============================================================
+// RECEPTION & STRICT MINIMAL TOKEN PRINTING (Requirement 7)
+// ==============================================================
+function renderQuickScanButtons() {
+  const container = document.getElementById('quickScanButtons');
+  if (!container) return;
+  container.innerHTML = '';
+  allPatients.forEach(p => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-outline';
+    btn.style.fontSize = '0.75rem';
+    btn.style.padding = '0.25rem 0.55rem';
+    btn.textContent = `${p.hospital_number} (${p.name.split(' ')[0]})`;
+    btn.onclick = () => {
+      document.getElementById('barcodeInput').value = p.hospital_number;
+      handleBarcodeScan();
+    };
+    container.appendChild(btn);
+  });
+}
+
+function populateSessionDropdowns() {
+  const sessionSelect = document.getElementById('sessionSelect');
+  if (!sessionSelect) return;
+  sessionSelect.innerHTML = '';
+  allSessions.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `${s.session_code} - ${s.session_name} (${s.department_name})`;
+    sessionSelect.appendChild(opt);
+  });
+}
+
+async function handleBarcodeScan() {
+  const barcode = document.getElementById('barcodeInput').value.trim();
+  if (!barcode) return;
+
+  try {
+    const res = await fetch('/api/patients/lookup-barcode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Patient lookup failed');
+      return;
+    }
+
+    selectedPatient = data;
+    renderPatientLookupCard(data);
+  } catch (err) {
+    alert('Network error during barcode scan');
+  }
+}
+
+function renderPatientLookupCard(data) {
+  const card = document.getElementById('patientLookupCard');
+  card.style.display = 'block';
+
+  document.getElementById('lookupPatientName').textContent = data.patient.name;
+  document.getElementById('lookupHospitalNum').textContent = `Hospital No: ${data.patient.hospital_number} | Blood: ${data.patient.blood_group || 'N/A'}`;
+  document.getElementById('lookupDob').textContent = data.patient.dob.split('T')[0];
+  document.getElementById('lookupGender').textContent = data.patient.gender;
+  document.getElementById('lookupPhone').textContent = data.patient.phone;
+
+  const bookingContainer = document.getElementById('bookingBadgeContainer');
+  if (data.booking) {
+    bookingContainer.innerHTML = `<span class="status-badge-live status-consulting">Booking Found: ${data.booking.reference}</span>`;
+    if (data.booking.sessionId) document.getElementById('sessionSelect').value = data.booking.sessionId;
+  } else {
+    bookingContainer.innerHTML = `<span class="status-badge-live status-available">Walk-In Patient</span>`;
+  }
+
+  const alertBox = document.getElementById('alreadyIssuedAlert');
+  const btnIssue = document.getElementById('btnIssueToken');
+  const btnReprint = document.getElementById('btnReprintToken');
+
+  if (data.activeToken) {
+    alertBox.style.display = 'block';
+    document.getElementById('existingTokenNumber').textContent = data.activeToken.token_number;
+    btnIssue.style.display = 'none';
+    btnReprint.style.display = 'inline-flex';
+    currentIssuedToken = data.activeToken;
+    updateMinimalReceipt(data.activeToken.token_number);
+  } else {
+    alertBox.style.display = 'none';
+    btnIssue.style.display = 'inline-flex';
+    btnReprint.style.display = 'none';
+  }
+}
+
+// Issue Token & Update Barcode
+async function submitTokenIssue() {
+  if (!selectedPatient) return;
+
+  const sessionId = document.getElementById('sessionSelect').value;
+  const priority = document.getElementById('prioritySelect').value;
+  const isAppt = !!selectedPatient.booking;
+  const apptRef = selectedPatient.booking ? selectedPatient.booking.reference : null;
+
+  try {
+    const res = await fetch('/api/visits/check-in', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patientId: selectedPatient.patient.id,
+        sessionId,
+        priority,
+        isAppointment: isAppt,
+        appointmentRef: apptRef
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to issue token');
+      return;
+    }
+
+    currentIssuedToken = data.token;
+    updateMinimalReceipt(data.token.token_number);
+    alert(`Token issued successfully: ${data.token.token_number}`);
+    handleBarcodeScan();
+  } catch (err) {
+    alert('Error issuing token');
+  }
+}
+
+// Update minimal thermal receipt (Section 7: ONLY Token Number and its Barcode)
+function updateMinimalReceipt(tokenNumber) {
+  document.getElementById('minimalPrintToken').textContent = tokenNumber;
+  renderBarcode(tokenNumber);
+}
+
+function renderBarcode(codeValue) {
+  try {
+    JsBarcode("#barcodeCanvas", codeValue, {
+      format: "CODE128",
+      lineColor: "#000000",
+      width: 2.6,
+      height: 68,
+      displayValue: true,
+      fontSize: 15,
+      font: "JetBrains Mono",
+      margin: 10
+    });
+  } catch (e) {
+    console.error('Barcode generation error:', e);
+  }
+}
+
+async function triggerMinimalThermalPrint() {
+  if (currentIssuedToken) {
+    try {
+      await fetch(`/api/tokens/${currentIssuedToken.id}/reprint`, { method: 'POST' });
+    } catch (e) {}
+  }
+  window.print();
+}
+
+async function resolveTokenBarcode() {
+  const tokenRef = document.getElementById('tokenBarcodeScanInput').value.trim();
+  if (!tokenRef) return;
+
+  try {
+    const res = await fetch(`/api/tokens/lookup/${encodeURIComponent(tokenRef)}`);
+    const data = await res.json();
+    const info = document.getElementById('tokenBarcodeResolvedInfo');
+
+    if (!res.ok) {
+      info.textContent = `❌ ${data.error || 'Token not found'}`;
+      info.style.color = 'var(--danger-rose)';
+      return;
+    }
+
+    info.innerHTML = `
+      ✅ <b>Token Resolved:</b> ${data.token_number} | <b>Status:</b> ${data.status} | 
+      <b>Patient:</b> ${data.patient_name} (${data.hospital_number}) | 
+      <b>Room:</b> ${data.room_number || 'Pending'}
+    `;
+    info.style.color = 'var(--accent-teal-dark)';
+  } catch (err) {
+    alert('Failed to resolve barcode');
+  }
+}
+
+// ==============================================================
+// ADVANCE APPOINTMENT BOOKING MODAL
+// ==============================================================
+function openAppointmentModal() {
+  populateAppointmentDropdowns();
+  document.getElementById('appointmentModal').style.display = 'flex';
+}
+
+function closeAppointmentModal() {
+  document.getElementById('appointmentModal').style.display = 'none';
+}
+
+function populateAppointmentDropdowns() {
+  const patientSelect = document.getElementById('bookingPatientSelect');
+  if (patientSelect) {
+    patientSelect.innerHTML = '';
+    allPatients.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.name} (${p.hospital_number})`;
+      patientSelect.appendChild(opt);
+    });
+  }
+
+  const sessionSelect = document.getElementById('bookingSessionSelect');
+  if (sessionSelect) {
+    sessionSelect.innerHTML = '';
+    allSessions.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.session_name} (${s.session_code})`;
+      sessionSelect.appendChild(opt);
+    });
+  }
+}
+
+async function submitAdvanceAppointment() {
+  const patientId = document.getElementById('bookingPatientSelect').value;
+  const sessionId = document.getElementById('bookingSessionSelect').value;
+  const scheduledTime = document.getElementById('bookingTimeInput').value;
+
+  try {
+    const res = await fetch('/api/appointments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patientId, sessionId, scheduledTime, source: 'MOBILE' })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to book appointment');
+      return;
+    }
+
+    alert(`Appointment Booked Successfully! Reference: ${data.reference}`);
+    closeAppointmentModal();
+    loadBaseData();
+    if (currentUser && currentUser.role === 'patient') loadPatientDashboard();
+  } catch (err) {
+    alert('Error booking appointment');
+  }
+}
+
+// ==============================================================
+// DOCTOR CONSOLE (Requirement 4 & 8)
+// ==============================================================
+function populateDoctorDropdown() {
+  const select = document.getElementById('activeDoctorSelect');
+  if (!select) return;
+  select.innerHTML = '';
+  allDoctors.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = `${d.name} (${d.room_number || 'No Room'}) - ${d.specialization}`;
+    select.appendChild(opt);
+  });
+  if (currentUser && currentUser.doctorId) {
+    activeDoctorId = currentUser.doctorId;
+    select.value = currentUser.doctorId;
+  } else if (allDoctors.length > 0) {
+    activeDoctorId = allDoctors[0].id;
+  }
+}
+
+async function loadDoctorProfile() {
+  activeDoctorId = document.getElementById('activeDoctorSelect').value;
+  await refreshDoctorConsole();
+}
+
+async function refreshDoctorConsole() {
+  try {
+    const res = await fetch('/api/doctors');
+    const doctors = await res.json();
+    allDoctors = doctors;
+
+    const doc = doctors.find(d => d.id === activeDoctorId);
+    if (!doc) return;
+
+    document.getElementById('activeDoctorTitle').textContent = doc.name;
+    document.getElementById('doctorRoomBadge').textContent = `Room: ${doc.room_number || 'Unassigned'}`;
+    document.getElementById('doctorDutyBadge').textContent = `Duty: ${doc.duty_status}`;
+
+    if (doc.current_token) {
+      document.getElementById('docCurrentTokenBadge').textContent = doc.current_token;
+      document.getElementById('docCurrentPatientName').textContent = 'Patient In Consultation';
+      document.getElementById('docCurrentHospitalNo').textContent = 'Active Consultation';
+      document.getElementById('btnRecall').style.display = 'inline-flex';
+      document.getElementById('btnMissed').style.display = 'inline-flex';
+    } else {
+      document.getElementById('docCurrentTokenBadge').textContent = '—';
+      document.getElementById('docCurrentPatientName').textContent = 'No Patient Called';
+      document.getElementById('docCurrentHospitalNo').textContent = 'Room Ready for Next Patient';
+      document.getElementById('btnRecall').style.display = 'none';
+      document.getElementById('btnMissed').style.display = 'none';
+    }
+
+    const sessionRes = await fetch('/api/sessions');
+    const sessions = await sessionRes.json();
+    const deptSession = sessions.find(s => s.department_id === doc.department_id && s.state === 'ACTIVE');
+
+    if (deptSession) {
+      document.getElementById('queueDeptLabel').textContent = `${deptSession.session_name}`;
+      document.getElementById('waitingCountBadge').textContent = `${deptSession.waiting_count} Waiting`;
+      renderSessionWaitingList(deptSession.session_code);
+    }
+  } catch (err) {
+    console.error('Error refreshing doctor console:', err);
+  }
+}
+
+async function renderSessionWaitingList(sessionCode) {
+  try {
+    const res = await fetch(`/api/displays/${sessionCode}`);
+    const data = await res.json();
+    const list = document.getElementById('sessionWaitingList');
+    list.innerHTML = '';
+
+    if (!data.nextWaitingToken) {
+      list.innerHTML = `<div style="color: var(--text-muted); padding: 0.5rem;">Queue is currently empty.</div>`;
+      return;
+    }
+
+    list.innerHTML = `
+      <div style="padding: 0.75rem; background: var(--bg-page); border-radius: 6px; margin-bottom: 0.4rem; display: flex; justify-content: space-between; border: 1px solid var(--border-light);">
+        <span><b>Next Waiting Token:</b> ${data.nextWaitingToken}</span>
+        <span class="status-badge-live status-calling">Waiting</span>
+      </div>
+      <div style="font-size: 0.8rem; color: var(--text-muted); padding: 0.25rem 0.5rem;">
+        Total waiting: ${data.waitingCount} | Completed today: ${data.completedCount}
+      </div>
+    `;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function doctorCallNext() {
+  try {
+    const res = await fetch('/api/queues/next', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ doctorId: activeDoctorId })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to call next patient');
+      return;
+    }
+
+    if (data.empty) {
+      alert('The waiting queue is empty.');
+      return;
+    }
+    if (data.hasActive) {
+      alert(data.message);
+      return;
+    }
+
+    currentAttendingToken = data.token;
+    document.getElementById('docCurrentTokenBadge').textContent = data.token.token_number;
+    document.getElementById('docCurrentPatientName').textContent = data.token.patient_name;
+    document.getElementById('docCurrentHospitalNo').textContent = `Patient ID: ${data.token.hospital_number}`;
+    document.getElementById('btnRecall').style.display = 'inline-flex';
+    document.getElementById('btnMissed').style.display = 'inline-flex';
+
+    document.getElementById('consultSymptoms').value = '';
+    document.getElementById('consultDiagnosis').value = '';
+    document.getElementById('consultNotes').value = '';
+  } catch (err) {
+    alert('Failed to call next patient');
+  }
+}
+
+async function doctorRecall() {
+  if (!currentAttendingToken) return;
+  try {
+    await fetch(`/api/tokens/${currentAttendingToken.id}/recall`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ doctorId: activeDoctorId })
+    });
+  } catch (err) {
+    alert('Recall failed');
+  }
+}
+
+async function doctorMarkMissed() {
+  if (!currentAttendingToken) return;
+  try {
+    await fetch(`/api/tokens/${currentAttendingToken.id}/missed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ doctorId: activeDoctorId, reason: 'Patient did not answer chime' })
+    });
+    currentAttendingToken = null;
+    refreshDoctorConsole();
+  } catch (err) {
+    alert('Error marking missed');
+  }
+}
+
+async function doctorScanTokenBarcode() {
+  const barcode = (document.getElementById('doctorBarcodeScanInput').value || '').trim();
+  const alertEl = document.getElementById('doctorBarcodeAlert');
+  alertEl.style.display = 'none';
+
+  if (!barcode) {
+    alertEl.textContent = 'Please enter or scan a token barcode.';
+    alertEl.style.display = 'block';
+    alertEl.style.color = 'var(--danger-rose)';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/doctor/scan-token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ barcode })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alertEl.textContent = `❌ ${data.error || 'Barcode scan failed.'}`;
+      alertEl.style.display = 'block';
+      alertEl.style.color = 'var(--danger-rose)';
+      return;
+    }
+
+    alertEl.textContent = `✅ Token Validated: ${data.token.token_number} - Assigned to ${data.token.patient_name}`;
+    alertEl.style.display = 'block';
+    alertEl.style.color = 'var(--success-green)';
+
+    // Update attending token state
+    currentAttendingToken = data.token;
+    document.getElementById('docCurrentTokenBadge').textContent = data.token.token_number;
+    document.getElementById('docCurrentPatientName').textContent = data.patient.name;
+    document.getElementById('docCurrentHospitalNo').textContent = `Patient ID: ${data.patient.hospital_number}`;
+    document.getElementById('btnRecall').style.display = 'inline-flex';
+    document.getElementById('btnMissed').style.display = 'inline-flex';
+
+    // Show Protected Personal Details Banner (Section 2.C)
+    const banner = document.getElementById('doctorPatientIdentityBanner');
+    banner.style.display = 'block';
+    document.getElementById('docPatBannerName').textContent = data.patient.name;
+    document.getElementById('docPatBannerHospId').textContent = data.patient.hospital_number;
+    document.getElementById('docPatBannerDob').textContent = `${data.patient.dob.split('T')[0]} (${data.patient.gender})`;
+    document.getElementById('docPatBannerGender').textContent = data.patient.gender;
+    document.getElementById('docPatBannerBlood').textContent = data.patient.blood_group || 'Not recorded';
+    document.getElementById('docPatBannerAllergies').textContent = data.patient.allergies || 'No known allergies';
+
+    // Auto-fill consultation symptoms if clean
+    document.getElementById('consultSymptoms').value = '';
+    document.getElementById('consultDiagnosis').value = '';
+    document.getElementById('consultNotes').value = '';
+    document.getElementById('consultRecommendations').value = '';
+    document.getElementById('consultFollowUpAdvice').value = '';
+    document.getElementById('customTaskTitle').value = '';
+
+  } catch (err) {
+    alertEl.textContent = 'Server connection error during barcode scan.';
+    alertEl.style.display = 'block';
+    alertEl.style.color = 'var(--danger-rose)';
+  }
+}
+
+function openDoctorCorrectionModal() {
+  if (!currentAttendingToken) {
+    alert('Please call or scan a patient token first.');
+    return;
+  }
+  document.getElementById('doctorCorrectionModal').style.display = 'flex';
+}
+
+function closeDoctorCorrectionModal() {
+  document.getElementById('doctorCorrectionModal').style.display = 'none';
+}
+
+async function submitDoctorCorrectionRequest() {
+  if (!currentAttendingToken) return;
+
+  const proposedCorrection = document.getElementById('correctionProposedInput').value.trim();
+  const reason = document.getElementById('correctionReasonInput').value.trim();
+
+  try {
+    const res = await fetch('/api/doctor/request-patient-info-correction', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({
+        patientId: currentAttendingToken.patient_id,
+        proposedCorrection,
+        reason
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to submit request');
+      return;
+    }
+
+    alert('Correction request logged and submitted to hospital admin.');
+    closeDoctorCorrectionModal();
+  } catch (e) {
+    alert('Error submitting correction request');
+  }
+}
+
+function doctorReviewBeforeSaving() {
+  if (!currentAttendingToken) {
+    alert('No patient is currently called.');
+    return;
+  }
+
+  const symptoms = document.getElementById('consultSymptoms').value || 'None recorded';
+  const diagnosis = document.getElementById('consultDiagnosis').value || 'Unspecified';
+  const notes = document.getElementById('consultNotes').value || 'None';
+  const recommendations = document.getElementById('consultRecommendations').value || 'None';
+  const followUp = document.getElementById('consultFollowUpAdvice').value || 'None';
+  const prescItem = document.getElementById('prescItem').value;
+  const prescDosage = document.getElementById('prescDosage').value;
+  const labItem = document.getElementById('labItem').value;
+  const taskTitle = document.getElementById('customTaskTitle').value;
+
+  const content = document.getElementById('doctorReviewContent');
+  content.innerHTML = `
+    <div style="margin-bottom: 0.75rem;"><b>Token:</b> ${currentAttendingToken.token_number} | <b>Patient:</b> ${currentAttendingToken.patient_name || 'Patient'}</div>
+    <div style="margin-bottom: 0.5rem;"><b style="color: var(--primary-navy);">Diagnosis:</b> ${diagnosis}</div>
+    <div style="margin-bottom: 0.5rem;"><b>Symptoms:</b> ${symptoms}</div>
+    <div style="margin-bottom: 0.5rem;"><b>Clinical Observations:</b> ${notes}</div>
+    <div style="margin-bottom: 0.5rem;"><b style="color: var(--accent-teal);">Recommendations:</b> ${recommendations}</div>
+    <div style="margin-bottom: 0.5rem;"><b>Follow-up Advice:</b> ${followUp}</div>
+    <div style="margin-bottom: 0.5rem;"><b style="color: var(--success-green);">Prescription:</b> ${prescItem ? `${prescItem} (${prescDosage})` : 'None'}</div>
+    <div style="margin-bottom: 0.5rem;"><b style="color: #db2777;">Laboratory Test:</b> ${labItem || 'None'}</div>
+    <div style="margin-bottom: 0.5rem;"><b style="color: #7c3aed;">Care Task:</b> ${taskTitle || 'None'}</div>
+  `;
+
+  document.getElementById('doctorReviewModal').style.display = 'flex';
+}
+
+function closeDoctorReviewModal() {
+  document.getElementById('doctorReviewModal').style.display = 'none';
+}
+
+async function doctorCompleteConsultation() {
+  if (!currentAttendingToken) {
+    alert('No patient is currently called.');
+    return;
+  }
+
+  const symptoms = document.getElementById('consultSymptoms').value;
+  const diagnosis = document.getElementById('consultDiagnosis').value;
+  const clinicalNotes = document.getElementById('consultNotes').value;
+  const recommendations = document.getElementById('consultRecommendations').value;
+  const followUpAdvice = document.getElementById('consultFollowUpAdvice').value;
+  const prescItem = document.getElementById('prescItem').value;
+  const prescDosage = document.getElementById('prescDosage').value;
+  const labItem = document.getElementById('labItem').value;
+  const labUrgency = document.getElementById('labUrgency').value;
+  const taskTitle = document.getElementById('customTaskTitle').value;
+  const taskDueDate = document.getElementById('customTaskDueDate').value;
+
+  const prescriptions = prescItem ? [{ itemName: prescItem, dosage: prescDosage }] : [];
+  const labs = labItem ? [{ testName: labItem, urgency: labUrgency }] : [];
+  const tasks = taskTitle ? [{ title: taskTitle, dueDate: taskDueDate || null }] : [];
+
+  try {
+    const res = await fetch('/api/consultations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({
+        tokenId: currentAttendingToken.id,
+        doctorId: activeDoctorId,
+        symptoms,
+        diagnosis,
+        clinicalNotes,
+        recommendations,
+        followUpAdvice,
+        prescriptions,
+        labs,
+        tasks
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to save consultation');
+      return;
+    }
+
+    alert('Consultation saved successfully! Prescriptions, recommendations, and care tasks synchronized to patient portal.');
+    currentAttendingToken = null;
+    document.getElementById('doctorPatientIdentityBanner').style.display = 'none';
+    refreshDoctorConsole();
+  } catch (err) {
+    alert('Error saving consultation');
+  }
+}
+
+async function viewPastRecords() {
+  const drawer = document.getElementById('pastHistoryDrawer');
+  if (drawer.style.display === 'block') {
+    drawer.style.display = 'none';
+    return;
+  }
+
+  const patientId = currentAttendingToken ? currentAttendingToken.patient_id : 'pat-001';
+  try {
+    const res = await fetch(`/api/patients/${patientId}/history`, {
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Could not load history');
+      return;
+    }
+
+    const container = document.getElementById('pastConsultationsList');
+    container.innerHTML = '';
+    if (data.history.length === 0) {
+      container.innerHTML = '<div style="color: var(--text-muted);">No prior clinical records found.</div>';
+    } else {
+      data.history.forEach(h => {
+        const item = document.createElement('div');
+        item.style.background = 'var(--bg-page)';
+        item.style.padding = '0.75rem';
+        item.style.borderRadius = '6px';
+        item.style.marginBottom = '0.5rem';
+        item.style.border = '1px solid var(--border-light)';
+        item.innerHTML = `
+          <div><b style="color: var(--primary-navy);">Date:</b> ${new Date(h.completed_at).toLocaleDateString()} | <b>Dr:</b> ${h.doctor_name}</div>
+          <div style="color: var(--accent-teal-dark);"><b>Diagnosis:</b> ${h.diagnosis}</div>
+          <div style="color: var(--text-muted);"><b style="color: var(--text-main);">Notes:</b> ${h.clinical_notes || '-'}</div>
+          ${h.prescriptions.length ? `<div style="color: var(--success-green);"><b>Rx:</b> ${h.prescriptions.map(p => p.item_name).join(', ')}</div>` : ''}
+          ${h.labRequests.length ? `<div style="color: #db2777;"><b>Lab:</b> ${h.labRequests.map(l => `${l.test_name} (${l.results || 'Pending'})`).join(', ')}</div>` : ''}
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    drawer.style.display = 'block';
+  } catch (err) {
+    alert('Failed to load past history');
+  }
+}
+
+// ==============================================================
+// ==============================================================
+// PATIENT PERSONAL HEALTH PORTAL (Section 1.A, 1.B, 1.C, 1.D)
+// ==============================================================
+async function loadPatientDashboard() {
+  if (!currentToken || !currentUser || currentUser.role !== 'patient') return;
+
+  try {
+    const res = await fetch('/api/patient/dashboard', {
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    const data = await res.json();
+    if (!res.ok) return;
+
+    document.getElementById('patientDashName').textContent = data.patient.name;
+    document.getElementById('patientDashHospNo').textContent = `Hospital No: ${data.patient.hospital_number} | Phone: ${data.patient.phone}`;
+
+    // 1. Active Token
+    if (data.activeToken) {
+      document.getElementById('patientDashToken').textContent = data.activeToken.token_number;
+      document.getElementById('patientDashSession').textContent = data.activeToken.session_name;
+      document.getElementById('patientDashAhead').textContent = data.eta ? data.eta.patientsAhead : '0';
+      document.getElementById('patientDashEta').textContent = data.eta ? `~${data.eta.estimatedMinutes} min` : 'Pending';
+
+      const roomAlert = document.getElementById('patientDashRoom');
+      if (data.activeToken.status === 'CALLED') {
+        roomAlert.textContent = `🔔 Called to ${data.activeToken.room_number || 'Consultation Room'}! Please enter.`;
+        roomAlert.style.color = 'var(--danger-rose)';
+      } else if (data.activeToken.status === 'IN_CONSULTATION') {
+        roomAlert.textContent = `Now in Consultation (${data.activeToken.room_number})`;
+        roomAlert.style.color = 'var(--success-green)';
+      } else {
+        roomAlert.textContent = 'Waiting in Queue (Pending Room Call)';
+        roomAlert.style.color = 'var(--warning-amber)';
+      }
+    } else {
+      document.getElementById('patientDashToken').textContent = 'None';
+      document.getElementById('patientDashSession').textContent = 'No active queue token currently issued.';
+      document.getElementById('patientDashAhead').textContent = '—';
+      document.getElementById('patientDashEta').textContent = '—';
+      document.getElementById('patientDashRoom').textContent = 'Not currently in queue';
+    }
+
+    // 2. Patient Care Plan & Action Tasks (Section 1.C)
+    const taskContainer = document.getElementById('patientCareTasksList');
+    taskContainer.innerHTML = '';
+    const pendingTasks = data.careTasks.filter(t => t.status !== 'VERIFIED_COMPLETED' && t.status !== 'CANCELLED');
+    document.getElementById('patientTaskSummaryBadge').textContent = `${pendingTasks.length} Pending / Action Required`;
+
+    if (data.careTasks.length === 0) {
+      taskContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No care tasks assigned.</div>';
+    } else {
+      data.careTasks.forEach(task => {
+        const card = document.createElement('div');
+        const isCompleted = task.status === 'VERIFIED_COMPLETED';
+        const isMarked = task.status === 'PATIENT_MARKED_COMPLETED' || task.status === 'AWAITING_VERIFICATION';
+        const isPending = task.status === 'PENDING' || task.status === 'IN_PROGRESS';
+
+        card.className = `task-card ${isCompleted ? 'task-completed' : isMarked ? 'task-awaiting' : 'task-pending'}`;
+
+        let pillClass = 'pill-pending';
+        let pillText = task.status;
+        if (isCompleted) { pillClass = 'pill-verified'; pillText = 'Verified Completed'; }
+        else if (isMarked) { pillClass = 'pill-awaiting'; pillText = 'Awaiting Verification'; }
+
+        card.innerHTML = `
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+              <span class="task-badge-pill ${pillClass}">${pillText}</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Due: ${task.due_date ? task.due_date.split('T')[0] : 'Open'}</span>
+            </div>
+            <div style="font-weight: 800; color: var(--primary-navy); font-size: 0.95rem;">${task.title}</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">${task.description || ''}</div>
+            <div style="font-size: 0.75rem; color: var(--accent-teal-dark); margin-top: 0.35rem;">Requesting Doctor: Dr. ${task.doctor_name || 'Hospital Staff'}</div>
+          </div>
+          <div>
+            ${isPending ? `
+              <button class="btn-teal" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="patientMarkTaskCompleted('${task.id}')">
+                Mark as Completed
+              </button>
+            ` : isMarked ? `
+              <span style="font-size: 0.75rem; color: var(--accent-teal-dark); font-weight: 700;">Awaiting Staff Verification</span>
+            ` : `
+              <span style="font-size: 0.75rem; color: var(--success-green); font-weight: 800;">✓ Verified</span>
+            `}
+          </div>
+        `;
+        taskContainer.appendChild(card);
+      });
+    }
+
+    // 3. In-App Notifications & Reminders (Section 1.D)
+    const notifContainer = document.getElementById('patientNotificationsList');
+    notifContainer.innerHTML = '';
+    const unreadCount = data.notifications.filter(n => !n.is_read).length;
+    document.getElementById('notificationUnreadCount').textContent = `${unreadCount} New`;
+
+    if (data.notifications.length === 0) {
+      notifContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">No notifications received.</div>';
+    } else {
+      data.notifications.forEach(n => {
+        const item = document.createElement('div');
+        item.className = `notification-item ${!n.is_read ? 'unread' : ''}`;
+        item.innerHTML = `
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem;">
+              <b style="font-size: 0.85rem; color: var(--primary-navy);">${n.title}</b>
+              <span style="font-size: 0.7rem; color: var(--text-muted);">${new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-main);">${n.message}</div>
+          </div>
+          ${!n.is_read ? `
+            <button class="btn-outline" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" onclick="markNotificationRead('${n.id}')">Dismiss</button>
+          ` : ''}
+        `;
+        notifContainer.appendChild(item);
+      });
+    }
+
+    // 4. Laboratory Investigation Results (Section 4)
+    const labContainer = document.getElementById('patientLabResultsList');
+    labContainer.innerHTML = '';
+    if (data.labRequests.length === 0) {
+      labContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem;">No laboratory tests on record.</div>';
+    } else {
+      data.labRequests.forEach(l => {
+        const row = document.createElement('div');
+        row.style.background = '#ffffff';
+        row.style.padding = '0.75rem 1rem';
+        row.style.borderRadius = '6px';
+        row.style.border = '1px solid var(--border-light)';
+        row.style.marginBottom = '0.5rem';
+
+        const isReleased = l.status === 'RESULT_RELEASED';
+        row.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <b style="color: var(--primary-navy);">${l.test_name}</b>
+            <span class="task-badge-pill ${isReleased ? 'pill-verified' : 'pill-pending'}">${l.status}</span>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+            Requested by Dr. ${l.doctor_name} | Urgency: <b>${l.urgency}</b>
+          </div>
+          ${l.results ? `
+            <div style="margin-top: 0.5rem; background: var(--bg-page); padding: 0.6rem; border-radius: 4px; font-size: 0.85rem; border-left: 3px solid var(--accent-teal);">
+              <b style="color: var(--primary-navy);">Official Result:</b> ${l.results}
+              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem;">Verified by: ${l.verified_staff_name || 'Laboratory Staff'}</div>
+            </div>
+          ` : `
+            <div style="font-size: 0.8rem; color: var(--warning-amber); margin-top: 0.35rem;">Laboratory analysis in progress. Official result will be released upon pathology verification.</div>
+          `}
+        `;
+        labContainer.appendChild(row);
+      });
+    }
+
+    // 5. Advance Appointments
+    const apptList = document.getElementById('patientAppointmentsList');
+    apptList.innerHTML = '';
+    if (data.appointments.length === 0) {
+      apptList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem;">No advance appointments booked.</div>';
+    } else {
+      data.appointments.forEach(a => {
+        const item = document.createElement('div');
+        item.style.padding = '0.65rem 1rem';
+        item.style.background = '#ffffff';
+        item.style.border = '1px solid var(--border-light)';
+        item.style.borderRadius = '6px';
+        item.style.marginBottom = '0.4rem';
+        item.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <b style="color: var(--primary-navy);">${a.reference}</b>
+              <div style="font-size: 0.8rem; color: var(--text-muted);">${a.session_name} • Dr. ${a.doctor_name || 'On Duty'}</div>
+            </div>
+            <span class="status-badge-live status-consulting">${a.status}</span>
+          </div>
+        `;
+        apptList.appendChild(item);
+      });
+    }
+
+  } catch (err) {
+    console.error('Error loading patient dashboard:', err);
+  }
+}
+
+async function patientMarkTaskCompleted(taskId) {
+  try {
+    const res = await fetch(`/api/patient/tasks/${taskId}/mark-completed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      }
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to update task');
+      return;
+    }
+
+    alert('Task marked as attended by patient. Awaiting staff/laboratory verification.');
+    loadPatientDashboard();
+  } catch (err) {
+    alert('Error marking task as completed');
+  }
+}
+
+async function markNotificationRead(notifId) {
+  try {
+    await fetch(`/api/patient/notifications/${notifId}/read`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    loadPatientDashboard();
+  } catch (err) {}
+}
+
+async function loadPatientOwnHistory() {
+  const container = document.getElementById('patientOwnHistoryContainer');
+  if (container.style.display === 'block') {
+    container.style.display = 'none';
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/patients/${currentUser.patientId}/history`, {
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to load medical history');
+      return;
+    }
+
+    const list = document.getElementById('patientOwnHistoryList');
+    list.innerHTML = '';
+    if (data.history.length === 0) {
+      list.innerHTML = '<div style="color: var(--text-muted);">No prior clinical records found.</div>';
+    } else {
+      data.history.forEach(h => {
+        const item = document.createElement('div');
+        item.style.background = 'var(--bg-page)';
+        item.style.padding = '0.85rem 1rem';
+        item.style.borderRadius = '8px';
+        item.style.marginBottom = '0.75rem';
+        item.style.border = '1px solid var(--border-light)';
+        item.innerHTML = `
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-light); padding-bottom: 0.4rem; margin-bottom: 0.4rem;">
+            <div><b style="color: var(--primary-navy);">Date:</b> ${new Date(h.completed_at).toLocaleDateString()} | <b>Dr:</b> ${h.doctor_name} (${h.specialization || 'OPD'})</div>
+            <span class="sample-notice-pill" style="background: var(--accent-teal-light); color: var(--accent-teal-dark);">Encounter Completed</span>
+          </div>
+          <div style="margin-bottom: 0.35rem;"><b style="color: var(--primary-navy);">Diagnosis:</b> <span style="font-weight: 700; color: var(--accent-teal-dark);">${h.diagnosis || 'General Consultation'}</span></div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.35rem;"><b style="color: var(--text-main);">Doctor Clinical Notes:</b> ${h.clinical_notes || '-'}</div>
+          ${h.recommendations ? `<div style="font-size: 0.85rem; color: var(--primary-navy); margin-bottom: 0.35rem;"><b>Doctor Recommendations:</b> ${h.recommendations}</div>` : ''}
+          ${h.follow_up_advice ? `<div style="font-size: 0.85rem; color: var(--warning-amber); margin-bottom: 0.35rem;"><b>Follow-up Advice:</b> ${h.follow_up_advice}</div>` : ''}
+          ${h.prescriptions && h.prescriptions.length ? `
+            <div style="margin-top: 0.4rem; padding: 0.5rem; background: #ffffff; border-radius: 4px; border: 1px solid var(--border-light);">
+              <b style="color: var(--success-green); font-size: 0.85rem;">Prescribed Medicines (Rx):</b>
+              <ul style="padding-left: 1.25rem; font-size: 0.8rem; margin-top: 0.2rem;">
+                ${h.prescriptions.map(p => `<li><b>${p.item_name}</b> - ${p.dosage} (${p.frequency}) for ${p.duration} ${p.instructions ? '• ' + p.instructions : ''}</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+          ${h.labRequests && h.labRequests.length ? `
+            <div style="margin-top: 0.4rem; padding: 0.5rem; background: #ffffff; border-radius: 4px; border: 1px solid var(--border-light);">
+              <b style="color: #db2777; font-size: 0.85rem;">Laboratory Investigations:</b>
+              <ul style="padding-left: 1.25rem; font-size: 0.8rem; margin-top: 0.2rem;">
+                ${h.labRequests.map(l => `<li><b>${l.test_name}</b> [${l.urgency}] — Result: <i>${l.results || 'Pending'}</i> (${l.status})</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+        `;
+        list.appendChild(item);
+      });
+    }
+
+    container.style.display = 'block';
+  } catch (err) {
+    alert('Failed to load history');
+  }
+}
+
+// ==============================================================
+// LABORATORY & INVESTIGATION WORKFLOW CONTROLLER (Section 4)
+// ==============================================================
+let allLabRequests = [];
+
+async function loadLabRequests() {
+  try {
+    const res = await fetch('/api/lab/requests', {
+      headers: { 'Authorization': `Bearer ${currentToken}` }
+    });
+    const requests = await res.json();
+    if (!res.ok) {
+      console.error(requests.error);
+      return;
+    }
+    allLabRequests = requests;
+
+    const tbody = document.getElementById('labRequestsTableBody');
+    const badge = document.getElementById('labRequestsCountBadge');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const pending = requests.filter(r => r.status !== 'RESULT_RELEASED' && r.status !== 'CANCELLED');
+    if (badge) badge.textContent = `${pending.length} Pending Investigations`;
+
+    if (requests.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No laboratory investigation requests on record.</td></tr>`;
+      return;
+    }
+
+    requests.forEach(r => {
+      const tr = document.createElement('tr');
+      const isReleased = r.status === 'RESULT_RELEASED';
+      const isUrgent = r.urgency === 'URGENT' || r.urgency === 'STAT';
+
+      tr.innerHTML = `
+        <td style="font-size: 0.85rem; color: var(--text-muted);">${new Date(r.created_at).toLocaleDateString()}</td>
+        <td>
+          <div style="font-weight: 800; color: var(--primary-navy);">${r.patient_name}</div>
+          <div style="font-size: 0.75rem; color: var(--accent-teal);">${r.hospital_number}</div>
+        </td>
+        <td><b style="color: #db2777;">${r.test_name}</b></td>
+        <td>${r.doctor_name}</td>
+        <td>
+          <span class="status-badge-live ${isUrgent ? 'status-calling' : 'status-available'}">${r.urgency}</span>
+        </td>
+        <td>
+          <span class="task-badge-pill ${isReleased ? 'pill-verified' : 'pill-pending'}">${r.status}</span>
+          ${r.results ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;"><i>${r.results.substring(0, 40)}...</i></div>` : ''}
+        </td>
+        <td>
+          <button class="btn-primary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; background: ${isReleased ? 'var(--accent-teal)' : '#db2777'};" onclick="openLabResultModal('${r.id}')">
+            ${isReleased ? 'View / Amend Result' : 'Enter & Release Result'}
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    console.error('Error loading lab requests:', err);
+  }
+}
+
+function openLabResultModal(requestId) {
+  const req = allLabRequests.find(r => r.id === requestId);
+  if (!req) return;
+
+  document.getElementById('labModalRequestId').value = req.id;
+  document.getElementById('labModalPatient').textContent = `${req.patient_name} (${req.hospital_number})`;
+  document.getElementById('labModalTest').textContent = req.test_name;
+  document.getElementById('labModalDoctor').textContent = req.doctor_name;
+  document.getElementById('labModalStatus').value = req.status === 'REQUESTED' ? 'RESULT_RELEASED' : req.status;
+  document.getElementById('labModalResultText').value = req.results || '';
+
+  document.getElementById('labResultModal').style.display = 'flex';
+}
+
+function closeLabResultModal() {
+  document.getElementById('labResultModal').style.display = 'none';
+}
+
+async function submitReleaseLabResult() {
+  const reqId = document.getElementById('labModalRequestId').value;
+  const status = document.getElementById('labModalStatus').value;
+  const results = document.getElementById('labModalResultText').value.trim();
+
+  if (!results) {
+    alert('Please enter official investigation results.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/lab/requests/${reqId}/release-result`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ results, status })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to release lab result');
+      return;
+    }
+
+    alert('Laboratory result successfully recorded and released to patient portal & doctor records.');
+    closeLabResultModal();
+    loadLabRequests();
+  } catch (err) {
+    alert('Network error while saving laboratory result');
+  }
+}
+
+// ==============================================================
+// ADMIN DASHBOARD & HOSPITAL OPERATIONS (Section 3.A, 3.B, 3.C, 3.D)
+// ==============================================================
+let adminPatientsCache = [];
+let adminAppointmentsCache = [];
+
+function switchAdminTab(tabName) {
+  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.admin-sub-pane').forEach(p => p.classList.remove('active'));
+
+  const btn = document.getElementById(`adminTabBtn-${tabName}`);
+  const pane = document.getElementById(`adminTab-${tabName}`);
+  if (btn) btn.classList.add('active');
+  if (pane) pane.classList.add('active');
+}
+
+async function loadAdminData() {
+  try {
+    const [statsRes, docRes, patRes, apptRes] = await Promise.all([
+      fetch('/api/system-stats').then(r => r.json()),
+      fetch('/api/doctors').then(r => r.json()),
+      fetch('/api/patients').then(r => r.json()),
+      fetch('/api/admin/appointments', { headers: { 'Authorization': `Bearer ${currentToken}` } }).then(r => r.json())
+    ]);
+
+    // 1. Operational Overview Metrics (Section 3.D)
+    if (document.getElementById('statTotalPatients')) document.getElementById('statTotalPatients').textContent = statsRes.totalPatients || patRes.length;
+    if (document.getElementById('statApptsToday')) document.getElementById('statApptsToday').textContent = statsRes.appointmentsToday || '0';
+    if (document.getElementById('statActiveWaiting')) document.getElementById('statActiveWaiting').textContent = statsRes.activeWaiting;
+    if (document.getElementById('statInService')) document.getElementById('statInService').textContent = statsRes.inService;
+    if (document.getElementById('statCompleted')) document.getElementById('statCompleted').textContent = statsRes.completedToday;
+    if (document.getElementById('statOnDutyDoctors')) document.getElementById('statOnDutyDoctors').textContent = statsRes.doctorsOnDuty;
+    if (document.getElementById('statPendingLabs')) document.getElementById('statPendingLabs').textContent = statsRes.pendingLabs || '0';
+    if (document.getElementById('statOutstandingTasks')) document.getElementById('statOutstandingTasks').textContent = statsRes.outstandingTasks || '0';
+
+    // 2. Doctor Rosters (Section 3.B)
+    const rosterList = document.getElementById('adminDoctorRosterList');
+    if (rosterList) {
+      rosterList.innerHTML = '';
+      docRes.forEach(d => {
+        const item = document.createElement('div');
+        item.style.background = 'var(--bg-page)';
+        item.style.border = '1px solid var(--border-light)';
+        item.style.padding = '0.85rem 1rem';
+        item.style.borderRadius = '8px';
+        item.style.display = 'flex';
+        item.style.justifyContent = 'space-between';
+        item.style.alignItems = 'center';
+
+        item.innerHTML = `
+          <div>
+            <div style="font-weight: 700; color: var(--primary-navy);">${d.name}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">${d.department_name} • Room: <b>${d.room_number || 'None'}</b> • Specialization: <b>${d.specialization}</b></div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="dutySelect-${d.id}" class="form-control" style="width: auto; padding: 0.35rem 0.6rem; font-size: 0.8rem;">
+              <option value="ON_DUTY" ${d.duty_status === 'ON_DUTY' ? 'selected' : ''}>ON DUTY</option>
+              <option value="ON_BREAK" ${d.duty_status === 'ON_BREAK' ? 'selected' : ''}>ON BREAK</option>
+              <option value="OFF_DUTY" ${d.duty_status === 'OFF_DUTY' ? 'selected' : ''}>OFF DUTY</option>
+            </select>
+            <button class="btn-outline" style="font-size: 0.75rem; padding: 0.35rem 0.75rem;" onclick="updateDoctorDuty('${d.id}')">Save Roster</button>
+          </div>
+        `;
+        rosterList.appendChild(item);
+      });
+    }
+
+    // 3. Patients Directory (Section 3.A)
+    adminPatientsCache = Array.isArray(patRes) ? patRes : [];
+    renderAdminPatientsTable(adminPatientsCache);
+
+    // 4. Appointments Directory (Section 3.C)
+    adminAppointmentsCache = Array.isArray(apptRes) ? apptRes : [];
+    renderAdminAppointmentsTable(adminAppointmentsCache);
+
+    // 5. System Audit Trail (Section 3.A, 7)
+    const auditContainer = document.getElementById('auditLogList');
+    if (auditContainer) {
+      auditContainer.innerHTML = '';
+      (statsRes.recentLogs || []).forEach(l => {
+        const row = document.createElement('div');
+        row.style.padding = '0.45rem 0';
+        row.style.borderBottom = '1px solid var(--border-light)';
+        row.innerHTML = `<span style="color: var(--accent-teal);">[${new Date(l.timestamp).toLocaleTimeString()}]</span> <span class="task-badge-pill pill-awaiting" style="font-size: 0.7rem;">${l.actor_role}</span> <b style="color: var(--primary-navy);">${l.action}</b>: ${l.details || ''}`;
+        auditContainer.appendChild(row);
+      });
+    }
+
+  } catch (err) {
+    console.error('Error loading admin data:', err);
+  }
+}
+
+function renderAdminPatientsTable(patients) {
+  const tbody = document.getElementById('adminPatientsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (patients.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1rem;">No registered patients match filter.</td></tr>`;
+    return;
+  }
+
+  patients.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight: 800; color: var(--primary-navy); font-family: 'JetBrains Mono', monospace;">${p.hospital_number}</td>
+      <td><b>${p.name}</b></td>
+      <td>${p.dob ? p.dob.split('T')[0] : '-'} (${p.gender})</td>
+      <td>${p.phone}</td>
+      <td>
+        <span style="font-weight: 700; color: var(--danger-rose);">${p.blood_group || '-'}</span>
+        ${p.allergies ? `<div style="font-size: 0.75rem; color: var(--text-muted);">Allergies: ${p.allergies}</div>` : ''}
+      </td>
+      <td><span class="status-badge-live status-consulting">${p.past_visits_count || 0} Visits</span></td>
+      <td>
+        <button class="btn-outline" style="font-size: 0.75rem; padding: 0.3rem 0.65rem;" onclick="openAdminEditPatientModal('${p.id}')">
+          Edit Profile
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterAdminPatients() {
+  const query = (document.getElementById('adminPatientSearchInput').value || '').toLowerCase();
+  const filtered = adminPatientsCache.filter(p =>
+    p.name.toLowerCase().includes(query) ||
+    p.hospital_number.toLowerCase().includes(query) ||
+    p.phone.includes(query)
+  );
+  renderAdminPatientsTable(filtered);
+}
+
+function renderAdminAppointmentsTable(appts) {
+  const tbody = document.getElementById('adminAppointmentsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (appts.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1rem;">No appointments found.</td></tr>`;
+    return;
+  }
+
+  appts.forEach(a => {
+    const tr = document.createElement('tr');
+    const isAppointed = a.status === 'APPOINTED';
+    const isCheckedIn = a.status === 'CHECKED_IN';
+
+    tr.innerHTML = `
+      <td style="font-weight: 800; color: var(--primary-navy);">${a.reference}</td>
+      <td>
+        <div><b>${a.patient_name}</b></div>
+        <div style="font-size: 0.75rem; color: var(--accent-teal);">${a.hospital_number}</div>
+      </td>
+      <td>${a.session_name}</td>
+      <td>${a.doctor_name || 'Assigned at OPD'}</td>
+      <td><b>${a.scheduled_time || '09:00'}</b></td>
+      <td>
+        <span class="status-badge-live ${isCheckedIn ? 'status-consulting' : isAppointed ? 'status-available' : 'status-calling'}">
+          ${a.status}
+        </span>
+      </td>
+      <td>
+        ${isAppointed ? `
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn-outline" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;" onclick="adminRescheduleAppointment('${a.id}')">Reschedule</button>
+            <button class="btn-outline" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; border-color: var(--danger-rose); color: var(--danger-rose);" onclick="adminCancelAppointment('${a.id}')">Cancel</button>
+          </div>
+        ` : `
+          <span style="font-size: 0.75rem; color: var(--text-muted);">${a.status}</span>
+        `}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterAdminAppointments() {
+  const filter = document.getElementById('adminApptStatusFilter').value;
+  if (filter === 'ALL') renderAdminAppointmentsTable(adminAppointmentsCache);
+  else renderAdminAppointmentsTable(adminAppointmentsCache.filter(a => a.status === filter));
+}
+
+async function adminCancelAppointment(apptId) {
+  const reason = prompt('Please enter the cancellation reason:');
+  if (!reason) return;
+
+  try {
+    const res = await fetch(`/api/admin/appointments/${apptId}/update-status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ status: 'CANCELLED', reason })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert('Appointment cancelled and patient notified.');
+      loadAdminData();
+    } else alert(data.error);
+  } catch (e) {
+    alert('Failed to cancel appointment');
+  }
+}
+
+async function adminRescheduleAppointment(apptId) {
+  const newTime = prompt('Enter new scheduled time (e.g. 11:30 AM):', '11:00 AM');
+  if (!newTime) return;
+
+  try {
+    const res = await fetch(`/api/admin/appointments/${apptId}/update-status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ status: 'RESCHEDULED', scheduledTime: newTime, reason: 'Patient requested time change' })
+    });
+    if (res.ok) {
+      alert('Appointment rescheduled and patient notified.');
+      loadAdminData();
+    }
+  } catch (e) {
+    alert('Failed to reschedule');
+  }
+}
+
+function openAdminRegisterPatientModal() {
+  document.getElementById('adminRegisterPatientModal').style.display = 'flex';
+}
+
+function closeAdminRegisterPatientModal() {
+  document.getElementById('adminRegisterPatientModal').style.display = 'none';
+}
+
+async function submitAdminRegisterPatient() {
+  const name = document.getElementById('regPatName').value.trim();
+  const dob = document.getElementById('regPatDob').value;
+  const gender = document.getElementById('regPatGender').value;
+  const phone = document.getElementById('regPatPhone').value.trim();
+  const bloodGroup = document.getElementById('regPatBlood').value;
+  const allergies = document.getElementById('regPatAllergies').value.trim();
+  const address = document.getElementById('regPatAddress').value.trim();
+
+  try {
+    const res = await fetch('/api/admin/patients', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ name, dob, gender, phone, bloodGroup, allergies, address })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to register patient');
+      return;
+    }
+
+    alert(`Patient Registered! Hospital No: ${data.patient.hospital_number} | Portal User: ${data.patient.username}`);
+    closeAdminRegisterPatientModal();
+    loadAdminData();
+    loadBaseData();
+  } catch (e) {
+    alert('Error registering patient');
+  }
+}
+
+function openAdminEditPatientModal(patientId) {
+  const p = adminPatientsCache.find(x => x.id === patientId);
+  if (!p) return;
+
+  document.getElementById('editPatId').value = p.id;
+  document.getElementById('editPatName').value = p.name;
+  document.getElementById('editPatPhone').value = p.phone;
+  document.getElementById('editPatBlood').value = p.blood_group || '';
+  document.getElementById('editPatAllergies').value = p.allergies || '';
+  document.getElementById('editPatAddress').value = p.address || '';
+
+  document.getElementById('adminEditPatientModal').style.display = 'flex';
+}
+
+function closeAdminEditPatientModal() {
+  document.getElementById('adminEditPatientModal').style.display = 'none';
+}
+
+async function submitAdminUpdatePatient() {
+  const patientId = document.getElementById('editPatId').value;
+  const name = document.getElementById('editPatName').value.trim();
+  const phone = document.getElementById('editPatPhone').value.trim();
+  const bloodGroup = document.getElementById('editPatBlood').value.trim();
+  const allergies = document.getElementById('editPatAllergies').value.trim();
+  const address = document.getElementById('editPatAddress').value.trim();
+
+  try {
+    const res = await fetch(`/api/admin/patients/${patientId}/update-profile`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ name, phone, bloodGroup, allergies, address })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to update patient profile');
+      return;
+    }
+
+    alert('Patient profile updated and audit trail logged.');
+    closeAdminEditPatientModal();
+    loadAdminData();
+    loadBaseData();
+  } catch (e) {
+    alert('Error updating patient profile');
+  }
+}
+
+async function updateDoctorDuty(doctorId) {
+  const select = document.getElementById(`dutySelect-${doctorId}`);
+  const dutyStatus = select.value;
+
+  try {
+    const res = await fetch('/api/admin/doctor-duty', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ doctorId, dutyStatus })
+    });
+
+    if (res.ok) {
+      alert('Doctor status updated.');
+      loadAdminData();
+      refreshDisplay();
+    }
+  } catch (err) {
+    alert('Failed to update status');
+  }
+}
+
+// ==============================================================
+// PUBLIC KIOSK DIGITAL SIGNAGE (Requirement 8)
+// ==============================================================
+function switchDisplayChannel(channelCode) {
+  currentDisplaySession = channelCode;
+  document.getElementById('tvDisplayHeaderTitle').textContent =
+    channelCode === 'OPD' ? 'MAIN OUTPATIENT DEPARTMENT (OPD) QUEUE' : 'SPECIALIST INFECTION CLINIC A QUEUE';
+  refreshDisplay();
+}
+
+async function refreshDisplay() {
+  try {
+    const res = await fetch(`/api/displays/${currentDisplaySession}`);
+    const data = await res.json();
+
+    const tbody = document.getElementById('tvGridBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    data.rooms.forEach(room => {
+      const tr = document.createElement('tr');
+      const isCalling = room.statusText.includes('Called');
+      const isConsulting = room.statusText.includes('Consulting');
+
+      tr.innerHTML = `
+        <td style="font-weight: 800; color: var(--primary-navy); font-size: 1.15rem;">${room.roomNumber}</td>
+        <td>
+          <div style="font-weight: 700; color: var(--text-main);">${room.doctorName}</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">${room.dutyStatus === 'ON_DUTY' ? 'On Duty' : 'Offline'}</div>
+        </td>
+        <td>
+          ${room.currentToken 
+            ? `<span class="token-pill-badge" style="font-size: 1.6rem;">${room.currentToken}</span>` 
+            : `<span style="color: var(--text-muted); font-size: 1.3rem;">—</span>`}
+        </td>
+        <td>
+          <span class="status-badge-live ${isCalling ? 'status-calling' : isConsulting ? 'status-consulting' : 'status-available'}">
+            ${room.statusText}
+          </span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('tvNextWaitingToken').textContent = data.nextWaitingToken || 'None (Queue Empty)';
+  } catch (err) {
+    console.error('Failed to refresh TV display:', err);
+  }
+}
